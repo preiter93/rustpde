@@ -4,7 +4,7 @@
 //!
 //! In the context of fluid simulations, chebyshev polynomials are especially
 //! usefull for wall bounded flows.
-use super::Transform;
+use super::{Differentiate, Transform};
 use crate::derive_composite;
 use crate::Real;
 use ndarray::prelude::*;
@@ -87,9 +87,7 @@ impl Chebyshev {
     }
 }
 
-impl Transform for Chebyshev {
-    type PhType = Real;
-    type SpType = Real;
+impl Transform<Real, Real> for Chebyshev {
     /// Transform: Physical space --> Chebyshev space
     ///
     /// The transform is conducted along a single axis.
@@ -119,8 +117,8 @@ impl Transform for Chebyshev {
         output: &mut ArrayBase<S, D>,
         axis: usize,
     ) where
-        R: Data<Elem = Self::SpType> + DataMut + RawDataClone,
-        S: Data<Elem = Self::PhType> + DataMut,
+        R: Data<Elem = Real> + DataMut + RawDataClone,
+        S: Data<Elem = Real> + DataMut,
         D: Dimension + RemoveAxis,
     {
         use ndrustfft::nddct1;
@@ -166,8 +164,8 @@ impl Transform for Chebyshev {
         output: &mut ArrayBase<S, D>,
         axis: usize,
     ) where
-        R: Data<Elem = Self::PhType> + DataMut + RawDataClone,
-        S: Data<Elem = Self::SpType> + DataMut,
+        R: Data<Elem = Real> + DataMut + RawDataClone,
+        S: Data<Elem = Real> + DataMut,
         D: Dimension + RemoveAxis,
     {
         use ndrustfft::nddct1;
@@ -189,7 +187,9 @@ impl Transform for Chebyshev {
             axis,
         );
     }
+}
 
+impl Differentiate for Chebyshev {
     /// Differentiate array n_times in spectral space along axis.
     ///
     /// Size of axis must match chebyshev's parameter *n*.
@@ -197,7 +197,7 @@ impl Transform for Chebyshev {
     /// # Example
     /// Differentiate once along first axis
     /// ```
-    /// use ndspectral::bases::{Chebyshev, Transform};
+    /// use ndspectral::bases::{Chebyshev, Differentiate};
     /// use ndarray::{Array, Dim, Ix};
     /// let (nx, ny) = (6, 4);
     /// let cheby = Chebyshev::new(nx);
@@ -253,7 +253,9 @@ derive_composite!(
     ChebDirichlet,
     Chebyshev,
     StencilChebyshev,
-    dirichlet
+    dirichlet,
+    Real,
+    Real
 );
 
 derive_composite!(
@@ -269,7 +271,9 @@ derive_composite!(
     ChebNeumann,
     Chebyshev,
     StencilChebyshev,
-    neumann
+    neumann,
+    Real,
+    Real
 );
 
 /// Stencil for composite chebyshev bases.
