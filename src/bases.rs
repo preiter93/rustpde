@@ -16,8 +16,8 @@ use ndarray::{Data, DataMut, LinalgScalar, RawDataClone, RemoveAxis};
 
 /// Enum of all implemented basis functions.
 ///
-/// All bases must implement the transform trait,
-/// which is then derived for the enum with enum_dispatch.
+/// All bases must implement the transform and differentiation trait,
+/// which from there derived for this enum.
 //#[enum_dispatch(Differentiate, Transform)]
 #[enum_dispatch(Differentiate)]
 pub enum Base {
