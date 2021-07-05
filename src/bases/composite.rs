@@ -18,10 +18,12 @@ pub struct Composite {
 /// stencil (s). Additionally, the identifier
 /// which generate the stencil must be supplied (a);
 /// it can deviate from the standard new() method.
+/// Lastly, the type before (t1) and after (t2) a
+/// transform must be supplied.
 #[macro_export]
 macro_rules! derive_composite {
     (
-        $(#[$meta:meta])* $i: ident, $p: ty, $s: ty, $a: ident
+        $(#[$meta:meta])* $i: ident, $p: ty, $s: ty, $a: ident, $t1: ty, $t2: ty
     ) => {
         $(#[$meta])*
         pub struct $i {
@@ -63,10 +65,7 @@ macro_rules! derive_composite {
             }
         }
 
-        impl Transform for $i {
-            type PhType = <$p as Transform>::PhType;
-            type SpType = <$p as Transform>::SpType;
-
+        impl Transform<$t1, $t2> for $i {
             /// Transform: Physical space --> Spectral space
             fn forward<R, S, D>(
                 &mut self,
@@ -74,8 +73,8 @@ macro_rules! derive_composite {
                 output: &mut ArrayBase<S, D>,
                 axis: usize,
             ) where
-                R: Data<Elem = Self::SpType> + DataMut + RawDataClone,
-                S: Data<Elem = Self::PhType> + DataMut,
+                R: Data<Elem = $t1> + DataMut + RawDataClone,
+                S: Data<Elem = $t2> + DataMut,
                 D: Dimension + RemoveAxis,
             {
                 let mut buffer = input.clone();
@@ -90,15 +89,17 @@ macro_rules! derive_composite {
                 output: &mut ArrayBase<S, D>,
                 axis: usize,
             ) where
-                R: Data<Elem = Self::PhType> + DataMut + RawDataClone,
-                S: Data<Elem = Self::SpType> + DataMut + RawDataClone,
+                R: Data<Elem = $t2> + DataMut + RawDataClone,
+                S: Data<Elem = $t1> + DataMut + RawDataClone,
                 D: Dimension + RemoveAxis,
             {
                 let mut buffer = output.clone();
                 self.stencil.to_parent(input,&mut buffer,axis);
                 self.parent.backward(&mut buffer, output, axis);
             }
+        }
 
+        impl Differentiate for $i {
             /// Differentiate array n_times in spectral space along
             /// axis.
             ///

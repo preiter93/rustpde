@@ -7,6 +7,7 @@ description = "N-dimensional spectral transforms of various basis functions"
 
 [dependencies]
 ndarray = { version = "0.15.0", features = ["rayon"] }
+#ndarray-linalg = { version = "0.13", features = ["openblas-static"]}
 ndrustfft = "0.1.0"
 enum_dispatch = "0.3.7"
 num-traits = "0.2.12"

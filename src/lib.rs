@@ -14,8 +14,11 @@
 #![warn(missing_docs)]
 #![warn(missing_doc_code_examples)]
 #![allow(clippy::unnecessary_cast)]
+#[macro_use]
+extern crate enum_dispatch;
 pub mod bases;
-pub use bases::Transform;
+pub mod solver;
+pub use bases::{Base, Differentiate, Transform};
 pub use bases::{ChebDirichlet, ChebNeumann, Chebyshev};
 use ndrustfft::Complex as Cmplx;
 
