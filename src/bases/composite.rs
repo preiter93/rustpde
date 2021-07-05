@@ -47,56 +47,6 @@ macro_rules! derive_composite {
                 }
             }
 
-            /// Differentiate array n_times in spectral space along
-            /// axis.
-            ///
-            /// Returns derivative coefficients in parent space
-            pub fn differentiate<S, D: Dimension>(
-                &self,
-                input: &ArrayBase<S, D>,
-                output: &mut ArrayBase<S, D>,
-                n_times: usize,
-                axis: usize
-            )
-            where
-                S: Data<Elem = Real> + DataMut + RawDataClone,
-                D: Dimension,
-            {
-                let mut buffer = output.clone();
-                self.stencil.to_parent(input,&mut buffer,axis);
-                self.parent.differentiate(&buffer, output, n_times, axis);
-            }
-
-            /// Transform: Physical space --> Spectral space
-            pub fn forward<S, D: Dimension>(
-                &mut self,
-                input: &mut ArrayBase<S, D>,
-                output: &mut ArrayBase<S, D>,
-                axis: usize,
-            ) where
-                S: Data<Elem = Real> + DataMut + RawDataClone,
-                D: Dimension + RemoveAxis,
-            {
-                let mut buffer = input.clone();
-                self.parent.forward(input, &mut buffer, axis);
-                self.stencil.from_parent(&buffer, output, axis);
-            }
-
-            /// Transform: Spectral space --> Physical space
-            pub fn backward<S, D: Dimension>(
-                &mut self,
-                input: &mut ArrayBase<S, D>,
-                output: &mut ArrayBase<S, D>,
-                axis: usize,
-            ) where
-                S: Data<Elem = Real> + DataMut + RawDataClone,
-                D: Dimension + RemoveAxis,
-            {
-                let mut buffer = output.clone();
-                self.stencil.to_parent(input,&mut buffer,axis);
-                self.parent.backward(&mut buffer, output, axis);
-            }
-
             /// Return size of physical space
             pub fn len_phys(&self) -> usize {
                 self.n
@@ -111,6 +61,66 @@ macro_rules! derive_composite {
             pub fn coords(&self) -> &Array1<f64> {
                 &self.parent.x
             }
+        }
+
+        impl Transform for $i {
+            type PhType = <$p as Transform>::PhType;
+            type SpType = <$p as Transform>::SpType;
+
+            /// Transform: Physical space --> Spectral space
+            fn forward<R, S, D>(
+                &mut self,
+                input: &mut ArrayBase<R, D>,
+                output: &mut ArrayBase<S, D>,
+                axis: usize,
+            ) where
+                R: Data<Elem = Self::SpType> + DataMut + RawDataClone,
+                S: Data<Elem = Self::PhType> + DataMut,
+                D: Dimension + RemoveAxis,
+            {
+                let mut buffer = input.clone();
+                self.parent.forward(input, &mut buffer, axis);
+                self.stencil.from_parent(&buffer, output, axis);
+            }
+
+            /// Transform: Spectral space --> Physical space
+            fn backward<R, S, D>(
+                &mut self,
+                input: &mut ArrayBase<R, D>,
+                output: &mut ArrayBase<S, D>,
+                axis: usize,
+            ) where
+                R: Data<Elem = Self::PhType> + DataMut + RawDataClone,
+                S: Data<Elem = Self::SpType> + DataMut + RawDataClone,
+                D: Dimension + RemoveAxis,
+            {
+                let mut buffer = output.clone();
+                self.stencil.to_parent(input,&mut buffer,axis);
+                self.parent.backward(&mut buffer, output, axis);
+            }
+
+            /// Differentiate array n_times in spectral space along
+            /// axis.
+            ///
+            /// Returns derivative coefficients in parent space
+            fn differentiate<T, R, S, D>(
+                &self,
+                input: &ArrayBase<R, D>,
+                output: &mut ArrayBase<S, D>,
+                n_times: usize,
+                axis: usize,
+            ) where
+                T: LinalgScalar + Send + From<f64>,
+                f64: Into<T>,
+                R: Data<Elem = T>,
+                S: Data<Elem = T> + RawDataClone + DataMut,
+                D: Dimension,
+            {
+                let mut buffer = output.clone();
+                self.stencil.to_parent(input,&mut buffer,axis);
+                self.parent.differentiate(&buffer, output, n_times, axis);
+            }
+
         }
     };
 }

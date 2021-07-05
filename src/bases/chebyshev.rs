@@ -4,11 +4,14 @@
 //!
 //! In the context of fluid simulations, chebyshev polynomials are especially
 //! usefull for wall bounded flows.
+use super::Transform;
 use crate::derive_composite;
 use crate::Real;
 use ndarray::prelude::*;
+use ndarray::LinalgScalar;
 use ndarray::{Data, DataMut, RawDataClone, RemoveAxis, Zip};
 use ndrustfft::DctHandler;
+// use ndarray::iter::Lanes;
 
 /// # Orthonormal set of basis functions: Chebyshev polynomials
 pub struct Chebyshev {
@@ -43,52 +46,50 @@ impl Chebyshev {
         }
     }
 
-    /// Differentiate array n_times in spectral space along axis.
-    ///
-    /// Size of axis must match chebyshev's parameter *n*.
-    ///
-    /// # Example
-    /// Differentiate once along first axis
-    /// ```
-    /// use ndspectral::bases::Chebyshev;
-    /// use ndarray::{Array, Dim, Ix};
-    /// let (nx, ny) = (6, 4);
-    /// let cheby = Chebyshev::new(nx);
-    /// let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
-    /// let mut diff = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
-    /// for (i, v) in data.iter_mut().enumerate() {
-    ///     *v = i as f64;
-    /// }
-    /// cheby.differentiate(&data,&mut diff, 1, 0);
-    /// ```
-    pub fn differentiate<S, D: Dimension>(
-        &self,
-        input: &ArrayBase<S, D>,
-        output: &mut ArrayBase<S, D>,
-        n_times: usize,
-        axis: usize,
-    ) where
-        S: Data<Elem = Real> + DataMut,
-        D: Dimension,
-    {
-        self.check_array(input, axis);
-        output.assign(&input);
-        Zip::from(output.lanes_mut(Axis(axis))).par_for_each(|mut out| {
-            for _ in 0..n_times {
-                out[0] = out[1];
-                for i in 1..out.len() - 1 {
-                    out[i] = 2. * (i as Real + 1.) * out[i + 1];
-                }
-                out[self.n - 1] = 0.;
-                // Add d_x(T_(n-2))
-                for i in (1..self.n - 2).rev() {
-                    out[i] += out[i + 2];
-                }
-                out[0] += out[2] / 2.;
-            }
-        });
+    /// Chebyshev nodes of the second kind, includes -1 and 1
+    fn nodes_2nd_kind(n: usize) -> Array1<Real> {
+        use std::f64::consts::PI;
+        let m: Real = (n - 1) as Real;
+        let mut grid = Array1::zeros(n);
+        for (k, x) in grid.iter_mut().enumerate() {
+            let arg = PI as Real * (m - 2.0 as Real * k as Real) / (2. as Real * m);
+            *x = -arg.sin();
+        }
+        grid
     }
 
+    /// Array of ones with alternating signs. This array is used
+    /// as a correction to the DCT in the forward and
+    /// backward transform, which deviates slightly from the
+    /// chebyshev transform.
+    /// For performance reason, it is also stored in the chebyshev
+    /// struct.
+    fn alternating_ones(n: usize) -> Array1<Real> {
+        let mut sign = Array1::<Real>::zeros(n);
+        for (i, a) in sign.iter_mut().enumerate() {
+            *a = (-1. as Real).powf(i as Real);
+        }
+        sign
+    }
+
+    fn check_array<T, S, D>(&self, data: &ArrayBase<S, D>, axis: usize)
+    where
+        T: LinalgScalar,
+        S: Data<Elem = T>,
+        D: Dimension,
+    {
+        assert!(
+            self.n == data.shape()[axis],
+            "Size mismatch in fft, got {} expected {}",
+            data.shape()[axis],
+            self.n
+        );
+    }
+}
+
+impl Transform for Chebyshev {
+    type PhType = Real;
+    type SpType = Real;
     /// Transform: Physical space --> Chebyshev space
     ///
     /// The transform is conducted along a single axis.
@@ -101,7 +102,7 @@ impl Chebyshev {
     /// # Example
     /// Forward transform along first axis
     /// ```
-    /// use ndspectral::bases::Chebyshev;
+    /// use ndspectral::bases::{Chebyshev, Transform};
     /// use ndarray::{Array, Dim, Ix};
     /// let (nx, ny) = (6, 4);
     /// let mut cheby = Chebyshev::new(nx);
@@ -112,13 +113,14 @@ impl Chebyshev {
     /// }
     /// cheby.forward(&mut data, &mut vhat, 0);
     /// ```
-    pub fn forward<S, D: Dimension>(
+    fn forward<R, S, D>(
         &mut self,
-        input: &mut ArrayBase<S, D>,
+        input: &mut ArrayBase<R, D>,
         output: &mut ArrayBase<S, D>,
         axis: usize,
     ) where
-        S: Data<Elem = Real> + DataMut,
+        R: Data<Elem = Self::SpType> + DataMut + RawDataClone,
+        S: Data<Elem = Self::PhType> + DataMut,
         D: Dimension + RemoveAxis,
     {
         use ndrustfft::nddct1;
@@ -147,7 +149,7 @@ impl Chebyshev {
     /// # Example
     /// Backward transform along first axis
     /// ```
-    /// use ndspectral::bases::Chebyshev;
+    /// use ndspectral::bases::{Chebyshev, Transform};
     /// use ndarray::{Array, Dim, Ix};
     /// let (nx, ny) = (6, 4);
     /// let mut cheby = Chebyshev::new(nx);
@@ -158,13 +160,14 @@ impl Chebyshev {
     /// }
     /// cheby.backward(&mut data, &mut vhat, 0);
     /// ```
-    pub fn backward<S, D: Dimension>(
+    fn backward<R, S, D>(
         &mut self,
-        input: &mut ArrayBase<S, D>,
+        input: &mut ArrayBase<R, D>,
         output: &mut ArrayBase<S, D>,
         axis: usize,
     ) where
-        S: Data<Elem = Real> + DataMut + RawDataClone,
+        R: Data<Elem = Self::PhType> + DataMut + RawDataClone,
+        S: Data<Elem = Self::SpType> + DataMut,
         D: Dimension + RemoveAxis,
     {
         use ndrustfft::nddct1;
@@ -187,43 +190,53 @@ impl Chebyshev {
         );
     }
 
-    /// Chebyshev nodes of the second kind, includes -1 and 1
-    fn nodes_2nd_kind(n: usize) -> Array1<Real> {
-        use std::f64::consts::PI;
-        let m: Real = (n - 1) as Real;
-        let mut grid = Array1::zeros(n);
-        for (k, x) in grid.iter_mut().enumerate() {
-            let arg = PI as Real * (m - 2.0 as Real * k as Real) / (2. as Real * m);
-            *x = -arg.sin();
-        }
-        grid
-    }
-
-    /// Array of ones with alternating signs. This array is used
-    /// as a correction to the DCT in the forward and
-    /// backward transform, which deviates slightly from the
-    /// chebyshev transform.
-    /// For performance reason, it is also stored in the chebyshev
-    /// struct.
-    fn alternating_ones(n: usize) -> Array1<Real> {
-        let mut sign = Array1::<Real>::zeros(n);
-        for (i, a) in sign.iter_mut().enumerate() {
-            *a = (-1. as Real).powf(i as Real);
-        }
-        sign
-    }
-
-    fn check_array<S, D: Dimension>(&self, data: &ArrayBase<S, D>, axis: usize)
-    where
-        S: Data<Elem = Real>,
+    /// Differentiate array n_times in spectral space along axis.
+    ///
+    /// Size of axis must match chebyshev's parameter *n*.
+    ///
+    /// # Example
+    /// Differentiate once along first axis
+    /// ```
+    /// use ndspectral::bases::{Chebyshev, Transform};
+    /// use ndarray::{Array, Dim, Ix};
+    /// let (nx, ny) = (6, 4);
+    /// let cheby = Chebyshev::new(nx);
+    /// let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
+    /// let mut diff = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
+    /// for (i, v) in data.iter_mut().enumerate() {
+    ///     *v = i as f64;
+    /// }
+    /// cheby.differentiate(&data,&mut diff, 1, 0);
+    /// ```
+    fn differentiate<T, R, S, D>(
+        &self,
+        input: &ArrayBase<R, D>,
+        output: &mut ArrayBase<S, D>,
+        n_times: usize,
+        axis: usize,
+    ) where
+        T: LinalgScalar + Send,
+        f64: Into<T>,
+        R: Data<Elem = T>,
+        S: Data<Elem = T> + DataMut,
         D: Dimension,
     {
-        assert!(
-            self.n == data.shape()[axis],
-            "Size mismatch in fft, got {} expected {}",
-            data.shape()[axis],
-            self.n
-        );
+        self.check_array(input, axis);
+        output.assign(&input);
+        Zip::from(output.lanes_mut(Axis(axis))).par_for_each(|mut out| {
+            for _ in 0..n_times {
+                out[0] = out[1];
+                for i in 1..out.len() - 1 {
+                    out[i] = (2. * (i as f64 + 1.)).into() * out[i + 1];
+                }
+                out[self.n - 1] = T::zero();
+                // Add d_x(T_(n-2))
+                for i in (1..self.n - 2).rev() {
+                    out[i] = out[i] + out[i + 2];
+                }
+                out[0] = out[0] + out[2] / 2.0.into();
+            }
+        });
     }
 }
 
@@ -322,27 +335,30 @@ impl StencilChebyshev {
     }
 
     /// Multiply stencil with a vector. (see test)
-    pub fn to_parent<S, D>(
+    pub fn to_parent<T, R, S, D>(
         &self,
-        composite: &ArrayBase<S, D>,
+        composite: &ArrayBase<R, D>,
         parent: &mut ArrayBase<S, D>,
         axis: usize,
     ) where
-        S: Data<Elem = Real> + DataMut,
+        T: LinalgScalar,
+        f64: Into<T>,
+        R: Data<Elem = T>,
+        S: Data<Elem = T> + DataMut,
         D: Dimension,
     {
         self.check_array(composite, axis, self.m);
         self.check_array(parent, axis, self.n);
         Zip::from(parent.lanes_mut(Axis(axis)))
             .and(composite.lanes(Axis(axis)))
-            .par_for_each(|mut p, c| {
-                p[0] = self.diag[0] * c[0];
-                p[1] = self.diag[1] * c[1];
+            .for_each(|mut p, c| {
+                p[0] = self.diag[0].into() * c[0];
+                p[1] = self.diag[1].into() * c[1];
                 for i in 2..self.n - 2 {
-                    p[i] = self.diag[i] * c[i] + self.low2[i - 2] * c[i - 2];
+                    p[i] = self.diag[i].into() * c[i] + self.low2[i - 2].into() * c[i - 2];
                 }
-                p[self.n - 2] = self.low2[self.n - 4] * c[self.n - 4];
-                p[self.n - 1] = self.low2[self.n - 3] * c[self.n - 3];
+                p[self.n - 2] = self.low2[self.n - 4].into() * c[self.n - 4];
+                p[self.n - 1] = self.low2[self.n - 3].into() * c[self.n - 3];
             });
     }
 
@@ -350,14 +366,18 @@ impl StencilChebyshev {
     ///
     /// This is done by solving a linear sytem, not
     /// by actually calculating the inverse of S.
-    pub fn from_parent<S, D>(
+    pub fn from_parent<T, R, S, D>(
         &self,
-        parent: &ArrayBase<S, D>,
+        parent: &ArrayBase<R, D>,
         composite: &mut ArrayBase<S, D>,
         axis: usize,
     ) where
-        S: Data<Elem = Real> + DataMut,
+        T: LinalgScalar,
+        f64: Into<T>,
+        R: Data<Elem = T>,
+        S: Data<Elem = T> + DataMut,
         D: Dimension,
+        //Lanes<'_, T, <D as ndarray::Dimension>::Smaller>: Send,
     {
         self.check_array(composite, axis, self.m);
         self.check_array(parent, axis, self.n);
@@ -365,19 +385,19 @@ impl StencilChebyshev {
         // Construct diagonal of S^T@S which is symmetric
         let mut d = Array1::zeros(self.m);
         let mut u = Array1::zeros(self.m - 2);
-        for (i, dd) in d.iter_mut().enumerate() {
-            *dd = self.diag[i] * self.diag[i] + self.low2[i] * self.low2[i];
+        for (i, x) in d.iter_mut().enumerate() {
+            *x = (self.diag[i] * self.diag[i] + self.low2[i] * self.low2[i]).into();
         }
-        for (i, uu) in u.iter_mut().enumerate() {
-            *uu = self.diag[i + 2] * self.low2[i];
+        for (i, x) in u.iter_mut().enumerate() {
+            *x = (self.diag[i + 2] * self.low2[i]).into();
         }
 
         Zip::from(parent.lanes(Axis(axis)))
             .and(composite.lanes_mut(Axis(axis)))
-            .par_for_each(|p, mut c| {
+            .for_each(|p, mut c| {
                 // Multiply rhs
                 for i in 0..self.m {
-                    c[i] = self.diag[i] * p[i] + self.low2[i] * p[i + 2];
+                    c[i] = self.diag[i].into() * p[i] + self.low2[i].into() * p[i + 2];
                 }
                 // Solve 3-diag system
                 Self::tdma(&u.view(), &d.view(), &u.view(), &mut c.view_mut())
@@ -392,11 +412,11 @@ impl StencilChebyshev {
     /// b: main-diagonal
     /// c: sub-diagonal (+2)
     #[allow(clippy::many_single_char_names)]
-    fn tdma(
-        a: &ArrayView1<f64>,
-        b: &ArrayView1<f64>,
-        c: &ArrayView1<f64>,
-        d: &mut ArrayViewMut1<f64>,
+    fn tdma<T: LinalgScalar>(
+        a: &ArrayView1<T>,
+        b: &ArrayView1<T>,
+        c: &ArrayView1<T>,
+        d: &mut ArrayViewMut1<T>,
     ) {
         let n = d.len();
         let mut x = Array1::zeros(n);
@@ -428,9 +448,10 @@ impl StencilChebyshev {
         d.assign(&x);
     }
 
-    fn check_array<S, D: Dimension>(&self, data: &ArrayBase<S, D>, axis: usize, n: usize)
+    fn check_array<T, S, D: Dimension>(&self, data: &ArrayBase<S, D>, axis: usize, n: usize)
     where
-        S: Data<Elem = Real>,
+        T: LinalgScalar,
+        S: Data<Elem = T>,
         D: Dimension,
     {
         assert!(
