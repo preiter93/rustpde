@@ -8,6 +8,8 @@ description = "N-dimensional spectral transforms of various basis functions"
 [dependencies]
 ndarray = { version = "0.15.0", features = ["rayon"] }
 ndrustfft = "0.1.0"
+enum_dispatch = "0.3.7"
+num-traits = "0.2.12"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }

@@ -1,6 +1,6 @@
 use ndarray::prelude::*;
 use ndarray::{Data, Ix, Ix1};
-use ndspectral::bases::{ChebDirichlet, ChebNeumann, Chebyshev};
+use ndspectral::bases::{ChebDirichlet, ChebNeumann, Chebyshev, Transform};
 use ndspectral::Real;
 
 fn main() {
