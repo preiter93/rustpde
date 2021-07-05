@@ -1,0 +1,17 @@
+[package]
+name = "ndspectral"
+version = "0.1.0"
+authors = ["preiter <phil.reiter93@gmail.com>"]
+edition = "2018"
+description = "N-dimensional spectral transforms of various basis functions"
+
+[dependencies]
+ndarray = { version = "0.15.0", features = ["rayon"] }
+ndrustfft = "0.1.0"
+
+[dev-dependencies]
+criterion = { version = "0.3", features = ["html_reports"] }
+
+[lib]
+name = "ndspectral"
+path = "src/lib.rs"
