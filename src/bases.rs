@@ -14,12 +14,39 @@ pub use chebyshev::{ChebDirichlet, ChebNeumann};
 use ndarray::prelude::*;
 use ndarray::{Data, DataMut, LinalgScalar, RawDataClone, RemoveAxis};
 
+/// Function space for Chebyshev Polynomials
+///             T{k}
+/// ```
+/// let ch = chebyshev(n);
+/// ```
+pub fn chebyshev(n: usize) -> Base {
+    Base::Chebyshev(Chebyshev::new(n))
+}
+
+/// Function space with Dirichlet boundary conditions
+///         phi{k} = T{k} - T{k+2}
+/// ```
+/// let cd = cheb_dirichlet(n);
+/// ```
+pub fn cheb_dirichlet(n: usize) -> Base {
+    Base::ChebDirichlet(ChebDirichlet::new(n))
+}
+
+// Function space with Neumann boundary conditions
+///         phi{k} = T{k} - k^2/(k+2)^2 T{k+2}
+/// ```
+/// let cn = cheb_neumann(n);
+/// ```
+pub fn cheb_neumann(n: usize) -> Base {
+    Base::ChebNeumann(ChebNeumann::new(n))
+}
+
 /// Enum of all implemented basis functions.
 ///
 /// All bases must implement the transform and differentiation trait,
 /// which from there derived for this enum.
 //#[enum_dispatch(Differentiate, Transform)]
-#[enum_dispatch(Differentiate, Mass, LaplacianInverse)]
+#[enum_dispatch(Differentiate, Mass, LaplacianInverse, Size)]
 pub enum Base {
     /// Orthonormal Chebyshev base
     Chebyshev(Chebyshev),
@@ -133,4 +160,15 @@ pub trait LaplacianInverse {
     fn pinv_eye<T>(&self) -> Array2<T>
     where
         T: LinalgScalar + From<f64>;
+}
+
+/// Defines size of basis
+#[enum_dispatch]
+pub trait Size {
+    /// Size in physical space
+    fn len_phys(&self) -> usize;
+    /// Size in spectral space
+    fn len_spec(&self) -> usize;
+    /// Coordinates in physical space
+    fn coords(&self) -> &Array1<f64>;
 }

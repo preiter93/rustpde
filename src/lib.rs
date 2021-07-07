@@ -17,10 +17,13 @@
 #[macro_use]
 extern crate enum_dispatch;
 pub mod bases;
+pub mod field;
 pub mod solver;
+pub use bases::{cheb_dirichlet, cheb_neumann, chebyshev};
 pub use bases::{Base, Differentiate, Transform};
-pub use bases::{ChebDirichlet, ChebNeumann, Chebyshev};
+pub use field::{Field, Field2, Space};
 use ndrustfft::Complex as Cmplx;
+pub use solver::{Solver, SolverScalar};
 
 /// Real type
 pub type Real = f64;

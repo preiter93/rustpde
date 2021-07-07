@@ -137,6 +137,20 @@ macro_rules! derive_composite {
             }
         }
 
+        impl Size for $i {
+            fn len_phys(&self) -> usize {
+                self.n
+            }
+
+            fn len_spec(&self) -> usize {
+                self.m
+            }
+
+            fn coords(&self) -> &Array1<f64> {
+                &self.parent.x
+            }
+        }
+
         impl LaplacianInverse for $i {
             /// Pseudoinverse mtrix of Laplacian
             fn pinv<T>(&self) -> Array2<T>

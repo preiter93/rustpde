@@ -17,7 +17,8 @@
 //! banded after multiplication with the pseudoinverse
 //! of D2 (B2). In this case, the second equation is
 //! solved, with A = B2.
-use super::{MatVec, Solve, Solver, SolverScalar};
+#![allow(dead_code)]
+use super::{MatVec, Solver, SolverScalar};
 use crate::Base;
 
 /// Container for Hholtz Solver
