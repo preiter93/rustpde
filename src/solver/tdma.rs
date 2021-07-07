@@ -4,6 +4,7 @@ use super::{Solve, SolverScalar};
 use ndarray::prelude::*;
 use ndarray::{Data, DataMut, RemoveAxis, Zip};
 use std::fmt::Debug;
+use std::ops::{Add, Div, Mul};
 
 /// Solve tridiagonal system with diagonals-offsets: -2, 0, 2
 #[derive(Debug)]
@@ -30,7 +31,10 @@ impl<T: SolverScalar> Tdma<T> {
         }
     }
 
-    fn solve_lane(&self, input: &mut ArrayViewMut1<T>) {
+    fn solve_lane<A>(&self, input: &mut ArrayViewMut1<A>)
+    where
+        A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A>,
+    {
         self.tdma(input);
     }
 
@@ -42,14 +46,17 @@ impl<T: SolverScalar> Tdma<T> {
     /// b: main-diagonal (0)
     /// c: sub-diagonal (+2)
     #[allow(clippy::many_single_char_names)]
-    fn tdma(&self, d: &mut ArrayViewMut1<T>) {
+    fn tdma<A>(&self, d: &mut ArrayViewMut1<A>)
+    where
+        A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A>,
+    {
         let n = d.len();
         //let mut x = Array1::from(vec![T::zero(); n]);
         let a = self.low.view();
         let b = self.dia.view();
         let c = self.upp.view();
         let mut w = vec![T::zero(); n - 2];
-        let mut g = vec![T::zero(); n];
+        let mut g = vec![A::zero(); n];
 
         // Forward sweep
         w[0] = c[0] / b[0];
@@ -63,19 +70,24 @@ impl<T: SolverScalar> Tdma<T> {
             w[i] = c[i] / (b[i] - a[i - 2] * w[i - 2]);
         }
         for i in 2..n {
-            g[i] = (d[i] - a[i - 2] * g[i - 2]) / (b[i] - a[i - 2] * w[i - 2]);
+            g[i] = (d[i] - g[i - 2] * a[i - 2]) / (b[i] - a[i - 2] * w[i - 2]);
         }
 
         // Back substitution
         d[n - 1] = g[n - 1];
         d[n - 2] = g[n - 2];
         for i in (1..n - 1).rev() {
-            d[i - 1] = g[i - 1] - w[i - 1] * d[i + 1]
+            d[i - 1] = g[i - 1] - d[i + 1] * w[i - 1]
         }
     }
 }
 
-impl<T: SolverScalar + Debug> Solve<T> for Tdma<T> {
+impl<T, A, D> Solve<A, D> for Tdma<T>
+where
+    T: SolverScalar,
+    A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A> + From<T>,
+    D: Dimension + RemoveAxis,
+{
     /// # Example
     ///```
     /// use ndspectral::solver::Tdma;
@@ -107,11 +119,12 @@ impl<T: SolverScalar + Debug> Solve<T> for Tdma<T> {
     ///     }
     /// }
     ///```
-    fn solve<S, D>(&self, input: &ArrayBase<S, D>, output: &mut ArrayBase<S, D>, axis: usize)
-    where
-        S: Data<Elem = T> + DataMut,
-        D: Dimension + RemoveAxis,
-    {
+    fn solve<S1: Data<Elem = A>, S2: Data<Elem = A> + DataMut>(
+        &self,
+        input: &ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
+        axis: usize,
+    ) {
         output.assign(&input);
         Zip::from(output.lanes_mut(Axis(axis))).for_each(|mut out| {
             self.solve_lane(&mut out);
