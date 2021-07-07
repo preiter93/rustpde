@@ -18,12 +18,12 @@ pub struct Composite {
 /// stencil (s). Additionally, the identifier
 /// which generate the stencil must be supplied (a);
 /// it can deviate from the standard new() method.
-/// Lastly, the type before (t1) and after (t2) a
-/// transform must be supplied.
+/// Lastly, the type and after (t1) a forward
+/// transform (type in spectral space) must be supplied.
 #[macro_export]
 macro_rules! derive_composite {
     (
-        $(#[$meta:meta])* $i: ident, $p: ty, $s: ty, $a: ident, $t1: ty, $t2: ty
+        $(#[$meta:meta])* $i: ident, $p: ty, $s: ty, $a: ident, $t1: ty
     ) => {
         $(#[$meta])*
         pub struct $i {
@@ -65,7 +65,7 @@ macro_rules! derive_composite {
             }
         }
 
-        impl Transform<$t1, $t2> for $i {
+        impl Transform<$t1> for $i {
             /// Transform: Physical space --> Spectral space
             fn forward<R, S, D>(
                 &mut self,
@@ -73,8 +73,8 @@ macro_rules! derive_composite {
                 output: &mut ArrayBase<S, D>,
                 axis: usize,
             ) where
-                R: Data<Elem = $t1> + DataMut + RawDataClone,
-                S: Data<Elem = $t2> + DataMut,
+                R: Data<Elem = Real> + DataMut + RawDataClone,
+                S: Data<Elem = $t1> + DataMut,
                 D: Dimension + RemoveAxis,
             {
                 let mut buffer = input.clone();
@@ -89,8 +89,8 @@ macro_rules! derive_composite {
                 output: &mut ArrayBase<S, D>,
                 axis: usize,
             ) where
-                R: Data<Elem = $t2> + DataMut + RawDataClone,
-                S: Data<Elem = $t1> + DataMut + RawDataClone,
+                R: Data<Elem = $t1> + DataMut + RawDataClone,
+                S: Data<Elem = Real> + DataMut + RawDataClone,
                 D: Dimension + RemoveAxis,
             {
                 let mut buffer = output.clone();
@@ -121,7 +121,38 @@ macro_rules! derive_composite {
                 self.stencil.to_parent(input,&mut buffer,axis);
                 self.parent.differentiate(&buffer, output, n_times, axis);
             }
-
         }
+
+        impl Mass for $i {
+            /// Return mass matrix
+            fn mass<T>(&self) -> Array2<T>
+            where
+                T: LinalgScalar + From<f64>
+            {
+                self.stencil.to_array()
+            }
+            /// Return size of basis
+            fn size(&self) -> usize {
+                self.n
+            }
+        }
+
+        impl LaplacianInverse for $i {
+            /// Pseudoinverse mtrix of Laplacian
+            fn pinv<T>(&self) -> Array2<T>
+            where
+                T: LinalgScalar + From<f64>
+            {
+                self.parent.pinv()
+            }
+            /// Pseudoidentity matrix of laplacian
+            fn pinv_eye<T>(&self) -> Array2<T>
+            where
+                T: LinalgScalar + From<f64>
+            {
+                self.parent.pinv_eye()
+            }
+        }
+
     };
 }

@@ -4,7 +4,7 @@
 //!
 //! In the context of fluid simulations, chebyshev polynomials are especially
 //! usefull for wall bounded flows.
-use super::{Differentiate, Transform};
+use super::{Differentiate, LaplacianInverse, Mass, Transform};
 use crate::derive_composite;
 use crate::Real;
 use ndarray::prelude::*;
@@ -87,7 +87,65 @@ impl Chebyshev {
     }
 }
 
-impl Transform<Real, Real> for Chebyshev {
+impl Chebyshev {
+    /// Pseudoinverse matrix of chebyshev spectral
+    /// differentiation matrices
+    ///
+    /// When preconditioned with the pseudoinverse Matrix,
+    /// systems become banded and thus efficient to solve.
+    ///
+    /// Literature:
+    /// Sahuck Oh - An Efficient Spectral Method to Solve Multi-Dimensional
+    /// Linear Partial Different Equations Using Chebyshev Polynomials
+    ///
+    /// Output:
+    /// ndarray (n x n) matrix, acts in spectral space
+    fn _pinv<T>(n: usize, deriv: usize) -> Array2<T>
+    where
+        T: LinalgScalar,
+        f64: Into<T>,
+    {
+        if deriv > 2 {
+            panic!("pinv does only support deriv's 1 & 2, got {}", deriv)
+        }
+        let mut pinv = Array2::<f64>::zeros([n, n]);
+        if deriv == 1 {
+            pinv[[1, 0]] = 1.;
+            for i in 2..n {
+                pinv[[i, i - 1]] = 1. / (2. * i as f64); // diag - 1
+            }
+            for i in 1..n - 2 {
+                pinv[[i, i + 1]] = -1. / (2. * i as f64); // diag + 1
+            }
+        } else if deriv == 2 {
+            pinv[[2, 0]] = 0.25;
+            for i in 3..n {
+                pinv[[i, i - 2]] = 1. / (4 * i * (i - 1)) as f64; // diag - 2
+            }
+            for i in 2..n - 2 {
+                pinv[[i, i]] = -1. / (2 * (i * i - 1)) as f64; // diag 0
+            }
+            for i in 2..n - 4 {
+                pinv[[i, i + 2]] = 1. / (4 * i * (i + 1)) as f64; // diag + 2
+            }
+        }
+        //pinv
+        pinv.mapv(|elem| elem.into())
+    }
+
+    /// Returns eye matrix, where the n ( = deriv) upper rows
+    /// are removed
+    fn _pinv_eye<T>(n: usize, deriv: usize) -> Array2<T>
+    where
+        T: LinalgScalar,
+        f64: Into<T>,
+    {
+        let pinv_eye = Array2::<f64>::eye(n).slice(s![deriv.., ..]).to_owned();
+        pinv_eye.mapv(|elem| elem.into())
+    }
+}
+
+impl Transform<Real> for Chebyshev {
     /// Transform: Physical space --> Chebyshev space
     ///
     /// The transform is conducted along a single axis.
@@ -111,14 +169,14 @@ impl Transform<Real, Real> for Chebyshev {
     /// }
     /// cheby.forward(&mut data, &mut vhat, 0);
     /// ```
-    fn forward<R, S, D>(
+    fn forward<S1, S2, D>(
         &mut self,
-        input: &mut ArrayBase<R, D>,
-        output: &mut ArrayBase<S, D>,
+        input: &mut ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
         axis: usize,
     ) where
-        R: Data<Elem = Real> + DataMut + RawDataClone,
-        S: Data<Elem = Real> + DataMut,
+        S1: Data<Elem = Real> + DataMut + RawDataClone,
+        S2: Data<Elem = Real> + DataMut,
         D: Dimension + RemoveAxis,
     {
         use ndrustfft::nddct1;
@@ -158,14 +216,14 @@ impl Transform<Real, Real> for Chebyshev {
     /// }
     /// cheby.backward(&mut data, &mut vhat, 0);
     /// ```
-    fn backward<R, S, D>(
+    fn backward<S1, S2, D>(
         &mut self,
-        input: &mut ArrayBase<R, D>,
-        output: &mut ArrayBase<S, D>,
+        input: &mut ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
         axis: usize,
     ) where
-        R: Data<Elem = Real> + DataMut + RawDataClone,
-        S: Data<Elem = Real> + DataMut,
+        S1: Data<Elem = Real> + DataMut + RawDataClone,
+        S2: Data<Elem = Real> + DataMut,
         D: Dimension + RemoveAxis,
     {
         use ndrustfft::nddct1;
@@ -208,17 +266,17 @@ impl Differentiate for Chebyshev {
     /// }
     /// cheby.differentiate(&data,&mut diff, 1, 0);
     /// ```
-    fn differentiate<T, R, S, D>(
+    fn differentiate<T, S1, S2, D>(
         &self,
-        input: &ArrayBase<R, D>,
-        output: &mut ArrayBase<S, D>,
+        input: &ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
         n_times: usize,
         axis: usize,
     ) where
         T: LinalgScalar + Send,
         f64: Into<T>,
-        R: Data<Elem = T>,
-        S: Data<Elem = T> + DataMut,
+        S1: Data<Elem = T>,
+        S2: Data<Elem = T> + DataMut,
         D: Dimension,
     {
         self.check_array(input, axis);
@@ -240,6 +298,48 @@ impl Differentiate for Chebyshev {
     }
 }
 
+impl Mass for Chebyshev {
+    /// Return mass matrix
+    fn mass<T: LinalgScalar + From<f64>>(&self) -> Array2<T> {
+        Array2::<T>::eye(self.n)
+    }
+    /// Return size of basis
+    fn size(&self) -> usize {
+        self.n
+    }
+}
+
+impl LaplacianInverse for Chebyshev {
+    /// Pseudoinverse matrix of chebyshev spectral
+    /// differentiation matrices
+    ///
+    /// When preconditioned with the pseudoinverse Matrix,
+    /// systems become banded and thus efficient to solve.
+    ///
+    /// For example:
+    /// ```
+    /// use ndspectral::bases::{Chebyshev};
+    /// use ndarray::Array2;
+    /// use crate::ndspectral::bases::LaplacianInverse;
+    /// let nx = 5;
+    /// let cheby = Chebyshev::new(nx);
+    /// let pinv: Array2<f64> = cheby.pinv();
+    /// ```
+    fn pinv<T>(&self) -> Array2<T>
+    where
+        T: LinalgScalar + From<f64>,
+    {
+        Self::_pinv(self.n, 2)
+    }
+    /// Pseudoidentity matrix of laplacian
+    fn pinv_eye<T>(&self) -> Array2<T>
+    where
+        T: LinalgScalar + From<f64>,
+    {
+        Self::_pinv_eye(self.n, 2)
+    }
+}
+
 derive_composite!(
     /// # ChebDirichlet
     /// Composite set of basis functions based on Chebyshev polynomials
@@ -254,7 +354,6 @@ derive_composite!(
     Chebyshev,
     StencilChebyshev,
     dirichlet,
-    Real,
     Real
 );
 
@@ -272,7 +371,6 @@ derive_composite!(
     Chebyshev,
     StencilChebyshev,
     neumann,
-    Real,
     Real
 );
 
@@ -406,6 +504,20 @@ impl StencilChebyshev {
                 // Solve 3-diag system
                 Self::tdma(&u.view(), &d.view(), &u.view(), &mut c.view_mut())
             });
+    }
+
+    /// Returns transform stencil as 2d ndarray
+    pub fn to_array<T>(&self) -> Array2<T>
+    where
+        T: LinalgScalar,
+        f64: Into<T>,
+    {
+        let mut mat = Array2::<f64>::zeros((self.n, self.m).f());
+        for (i, (d, l)) in self.diag.iter().zip(self.low2.iter()).enumerate() {
+            mat[[i, i]] = *d;
+            mat[[i + 2, i]] = *l;
+        }
+        mat.mapv(|elem| elem.into())
     }
 
     /// Tridiagonal matrix solver

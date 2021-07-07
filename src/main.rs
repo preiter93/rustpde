@@ -1,6 +1,10 @@
-// use ndarray::prelude::*;
-// use ndarray::{Data, Ix, Ix1};
-// use ndspectral::bases::{ChebDirichlet, ChebNeumann, Chebyshev, Differentiate};
+#![allow(unused_mut)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
+use ndarray::prelude::*;
+use ndarray::{Data, Ix, Ix1};
+use ndspectral::bases::{Base, ChebDirichlet, ChebNeumann, Chebyshev};
+use ndspectral::bases::{Differentiate, Mass, Transform};
 // use ndspectral::solver::utils::eig;
 // use ndspectral::solver::Fdma;
 // use ndspectral::solver::Solve;
@@ -9,27 +13,28 @@
 // use ndspectral::{Base, Transform};
 
 fn main() {
-    // println!("Hello, world!");
-    // let (nx, ny) = (6, 4);
+    println!("Hello, world!");
+    let (nx, ny) = (6, 4);
     // let mut cheby = Chebyshev::new(ny);
-    // let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
-    // let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
-    // for (i, v) in data.iter_mut().enumerate() {
-    //     *v = i as f64;
-    // }
+    let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
+    let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
+    for (i, v) in data.iter_mut().enumerate() {
+        *v = i as f64;
+    }
     // cheby.differentiate(&data, &mut vhat, 2, 1);
     // println!("{:?}", vhat);
-    //
-    // let mut cd = ChebNeumann::new(ny + 2);
-    // let mut cd = Base::ChebNeumann(cd);
-    // let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny + 2));
-    // for (i, v) in data.iter_mut().enumerate() {
-    //     *v = i as f64;
-    // }
-    // //cd.differentiate(&data, &mut vhat, 2, 1);
-    // cd.backward(&mut data, &mut vhat, 1);
-    // cd.forward(&mut vhat, &mut data, 1);
-    // println!("{:?}", data);
+
+    let mut cd = ChebNeumann::new(ny + 2);
+    let mut cd = Base::ChebNeumann(cd);
+    let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny + 2));
+    for (i, v) in data.iter_mut().enumerate() {
+        *v = i as f64;
+    }
+    //cd.differentiate(&data, &mut vhat, 2, 1);
+    cd.backward(&mut data, &mut vhat, 1);
+    cd.forward(&mut vhat, &mut data, 1);
+    println!("{:?}", data);
+    println!("{:?}", cd.mass::<f64>());
 
     //
     // // let stencil = StencilChebyshev::dirichlet(5);
