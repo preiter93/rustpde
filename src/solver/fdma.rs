@@ -4,7 +4,7 @@ use super::{diag, SolverScalar, Tdma};
 use ndarray::prelude::*;
 use ndarray::ScalarOperand;
 use ndarray::{Data, DataMut, RemoveAxis, Zip};
-use std::ops::{Add, Mul};
+use std::ops::{Add, Div, Mul};
 
 /// Solve banded system with diagonals-offsets: -2, 0, 2, 4
 #[derive(Debug)]
@@ -81,7 +81,10 @@ where
         self.sweeped = true;
     }
 
-    fn solve_lane(&self, input: &mut ArrayViewMut1<T>) {
+    fn solve_lane<A>(&self, input: &mut ArrayViewMut1<A>)
+    where
+        A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A>,
+    {
         self.fdma(input);
     }
 
@@ -95,24 +98,32 @@ where
     /// u2: sub-diagonal (+2)
     #[allow(clippy::many_single_char_names)]
     #[allow(clippy::assign_op_pattern)]
-    pub fn fdma(&self, x: &mut ArrayViewMut1<T>) {
+    pub fn fdma<A>(&self, x: &mut ArrayViewMut1<A>)
+    where
+        A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A>,
+    {
         let n = self.n;
 
         for i in 2..n {
-            x[i] = x[i] - self.low[i - 2] * x[i - 2];
+            x[i] = x[i] - x[i - 2] * self.low[i - 2];
         }
 
-        x[n - 1] /= self.dia[n - 1];
-        x[n - 2] /= self.dia[n - 2];
-        x[n - 3] = (x[n - 3] - self.up1[n - 3] * x[n - 1]) / self.dia[n - 3];
-        x[n - 4] = (x[n - 4] - self.up1[n - 4] * x[n - 2]) / self.dia[n - 4];
+        x[n - 1] = x[n - 1] / self.dia[n - 1];
+        x[n - 2] = x[n - 2] / self.dia[n - 2];
+        x[n - 3] = (x[n - 3] - x[n - 1] * self.up1[n - 3]) / self.dia[n - 3];
+        x[n - 4] = (x[n - 4] - x[n - 2] * self.up1[n - 4]) / self.dia[n - 4];
         for i in (0..n - 4).rev() {
-            x[i] = (x[i] - self.up1[i] * x[i + 2] - self.up2[i] * x[i + 4]) / self.dia[i];
+            x[i] = (x[i] - x[i + 2] * self.up1[i] - x[i + 4] * self.up2[i]) / self.dia[i];
         }
     }
 }
 
-impl<T: SolverScalar> Solve<T> for Fdma<T> {
+impl<T, A, D> Solve<A, D> for Fdma<T>
+where
+    T: SolverScalar,
+    A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A> + From<T>,
+    D: Dimension + RemoveAxis,
+{
     /// # Example
     ///```
     /// use ndspectral::solver::Fdma;
@@ -147,11 +158,12 @@ impl<T: SolverScalar> Solve<T> for Fdma<T> {
     ///     }
     /// }
     ///```
-    fn solve<S, D>(&self, input: &ArrayBase<S, D>, output: &mut ArrayBase<S, D>, axis: usize)
-    where
-        S: Data<Elem = T> + DataMut,
-        D: Dimension + RemoveAxis,
-    {
+    fn solve<S1: Data<Elem = A>, S2: Data<Elem = A> + DataMut>(
+        &self,
+        input: &ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
+        axis: usize,
+    ) {
         assert!(
             self.sweeped,
             "Fdma: Forward sweep must be performed for solve! Abort."

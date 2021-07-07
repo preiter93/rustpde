@@ -1,33 +1,36 @@
-use ndarray::prelude::*;
-use ndarray::{Data, Ix, Ix1};
-use ndspectral::bases::{ChebDirichlet, ChebNeumann, Chebyshev, Differentiate};
-use ndspectral::solver::Fdma;
-use ndspectral::solver::Solve;
-use ndspectral::Real;
-use ndspectral::{Base, Transform};
+// use ndarray::prelude::*;
+// use ndarray::{Data, Ix, Ix1};
+// use ndspectral::bases::{ChebDirichlet, ChebNeumann, Chebyshev, Differentiate};
+// use ndspectral::solver::utils::eig;
+// use ndspectral::solver::Fdma;
+// use ndspectral::solver::Solve;
+// use ndspectral::solver::{MatVec, MatVecDot};
+// use ndspectral::Real;
+// use ndspectral::{Base, Transform};
 
 fn main() {
-    println!("Hello, world!");
-    let (nx, ny) = (6, 4);
-    let mut cheby = Chebyshev::new(ny);
-    let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
-    let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
-    for (i, v) in data.iter_mut().enumerate() {
-        *v = i as f64;
-    }
-    cheby.differentiate(&data, &mut vhat, 2, 1);
-    println!("{:?}", vhat);
+    // println!("Hello, world!");
+    // let (nx, ny) = (6, 4);
+    // let mut cheby = Chebyshev::new(ny);
+    // let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
+    // let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
+    // for (i, v) in data.iter_mut().enumerate() {
+    //     *v = i as f64;
+    // }
+    // cheby.differentiate(&data, &mut vhat, 2, 1);
+    // println!("{:?}", vhat);
+    //
+    // let mut cd = ChebNeumann::new(ny + 2);
+    // let mut cd = Base::ChebNeumann(cd);
+    // let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny + 2));
+    // for (i, v) in data.iter_mut().enumerate() {
+    //     *v = i as f64;
+    // }
+    // //cd.differentiate(&data, &mut vhat, 2, 1);
+    // cd.backward(&mut data, &mut vhat, 1);
+    // cd.forward(&mut vhat, &mut data, 1);
+    // println!("{:?}", data);
 
-    let mut cd = ChebNeumann::new(ny + 2);
-    let mut cd = Base::ChebNeumann(cd);
-    let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny + 2));
-    for (i, v) in data.iter_mut().enumerate() {
-        *v = i as f64;
-    }
-    //cd.differentiate(&data, &mut vhat, 2, 1);
-    cd.backward(&mut data, &mut vhat, 1);
-    cd.forward(&mut vhat, &mut data, 1);
-    println!("{:?}", data);
     //
     // // let stencil = StencilChebyshev::dirichlet(5);
     // // // dot
@@ -62,6 +65,16 @@ fn main() {
     //         matrix[[i, i + 4]] = 2.5 * j;
     //     }
     // }
+    //
+    // let (lam, q, qi) = eig(&matrix);
+
+    //let nal = ndarray_to_nalgebra(matrix);
+
+    // let matvec = MatVec::MatVecDot(MatVecDot::new(&matrix));
+    // matvec.solve(&data, &mut result, 0);
+    // println!("{:?}", result);
+    // println!("{:?}", matrix.dot(&data));
+
     // println!("{:?}", matrix);
     // let solver = Fdma::from_matrix(&matrix);
     // solver.solve(&data, &mut result, 0);

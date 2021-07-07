@@ -7,7 +7,13 @@ description = "N-dimensional spectral transforms of various basis functions"
 
 [dependencies]
 ndarray = { version = "0.15.0", features = ["rayon"] }
+
+# newest ndarray version not compatible with -linalg
+ndarray-02 = { package = "ndarray", version ="0.14" }
+ndarray-linalg = { version = "0.13", features = ["openblas-static"] }
 #ndarray-linalg = { version = "0.13", features = ["openblas-static"]}
+#nalgebra = "0.27.1"
+#nalgebra-lapack = "0.18.0"
 ndrustfft = "0.1.0"
 enum_dispatch = "0.3.7"
 num-traits = "0.2.12"
