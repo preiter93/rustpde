@@ -4,7 +4,8 @@
 use ndarray::prelude::*;
 use ndarray::{Data, Ix, Ix1};
 use ndspectral::bases::{Base, ChebDirichlet, ChebNeumann, Chebyshev};
-use ndspectral::bases::{Differentiate, Mass, Transform};
+use ndspectral::bases::{Differentiate, Mass, Size, Transform};
+use ndspectral::*;
 // use ndspectral::solver::utils::eig;
 // use ndspectral::solver::Fdma;
 // use ndspectral::solver::Solve;
@@ -14,27 +15,38 @@ use ndspectral::bases::{Differentiate, Mass, Transform};
 
 fn main() {
     println!("Hello, world!");
-    let (nx, ny) = (6, 4);
-    // let mut cheby = Chebyshev::new(ny);
-    let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
-    let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
-    for (i, v) in data.iter_mut().enumerate() {
+    let (nx, ny) = (6, 8);
+    let cdx = cheb_dirichlet(nx);
+    let cdy = cheb_dirichlet(ny);
+    let space = Space::new([cdx, cdy]);
+    let mut field = Field2::new(space);
+    // // let mut cheby = Chebyshev::new(ny);
+    // let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
+    // let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
+    for (i, v) in field.v.iter_mut().enumerate() {
         *v = i as f64;
     }
-    // cheby.differentiate(&data, &mut vhat, 2, 1);
-    // println!("{:?}", vhat);
-
-    let mut cd = ChebNeumann::new(ny + 2);
-    let mut cd = Base::ChebNeumann(cd);
-    let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny + 2));
-    for (i, v) in data.iter_mut().enumerate() {
-        *v = i as f64;
-    }
-    //cd.differentiate(&data, &mut vhat, 2, 1);
-    cd.backward(&mut data, &mut vhat, 1);
-    cd.forward(&mut vhat, &mut data, 1);
-    println!("{:?}", data);
-    println!("{:?}", cd.mass::<f64>());
+    println!("{:?}", field.v);
+    println!("{:?}", field.vhat);
+    field.forward();
+    println!("{:?}", field.vhat);
+    field.backward();
+    println!("{:?}", field.v);
+    // // cheby.differentiate(&data, &mut vhat, 2, 1);
+    // // println!("{:?}", vhat);
+    //
+    // let mut cd = ChebNeumann::new(ny + 2);
+    // //let mut cd = Base::ChebNeumann(cd);
+    // let mut vhat = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny + 2));
+    // for (i, v) in data.iter_mut().enumerate() {
+    //     *v = i as f64;
+    // }
+    // //cd.differentiate(&data, &mut vhat, 2, 1);
+    // cd.backward(&mut data, &mut vhat, 1);
+    // cd.forward(&mut vhat, &mut data, 1);
+    // println!("{:?}", data);
+    // println!("{:?}", cd.mass::<f64>());
+    // println!("{:?}", cd.len_phys());
 
     //
     // // let stencil = StencilChebyshev::dirichlet(5);

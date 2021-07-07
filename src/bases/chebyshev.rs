@@ -4,7 +4,7 @@
 //!
 //! In the context of fluid simulations, chebyshev polynomials are especially
 //! usefull for wall bounded flows.
-use super::{Differentiate, LaplacianInverse, Mass, Transform};
+use super::{Differentiate, LaplacianInverse, Mass, Size, Transform};
 use crate::derive_composite;
 use crate::Real;
 use ndarray::prelude::*;
@@ -306,6 +306,20 @@ impl Mass for Chebyshev {
     /// Return size of basis
     fn size(&self) -> usize {
         self.n
+    }
+}
+
+impl Size for Chebyshev {
+    fn len_phys(&self) -> usize {
+        self.n
+    }
+
+    fn len_spec(&self) -> usize {
+        self.n
+    }
+
+    fn coords(&self) -> &Array1<f64> {
+        &self.x
     }
 }
 
