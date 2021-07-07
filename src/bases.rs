@@ -19,7 +19,7 @@ use ndarray::{Data, DataMut, LinalgScalar, RawDataClone, RemoveAxis};
 /// All bases must implement the transform and differentiation trait,
 /// which from there derived for this enum.
 //#[enum_dispatch(Differentiate, Transform)]
-#[enum_dispatch(Differentiate)]
+#[enum_dispatch(Differentiate, Mass, LaplacianInverse)]
 pub enum Base {
     /// Orthonormal Chebyshev base
     Chebyshev(Chebyshev),
@@ -30,15 +30,15 @@ pub enum Base {
     //Fourier(Fourier),
 }
 
-impl Transform<Real, Real> for Base {
-    fn forward<R, S, D>(
+impl Transform<Real> for Base {
+    fn forward<S1, S2, D>(
         &mut self,
-        input: &mut ArrayBase<R, D>,
-        output: &mut ArrayBase<S, D>,
+        input: &mut ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
         axis: usize,
     ) where
-        R: Data<Elem = Real> + DataMut + RawDataClone,
-        S: Data<Elem = Real> + DataMut + RawDataClone,
+        S1: Data<Elem = Real> + DataMut + RawDataClone,
+        S2: Data<Elem = Real> + DataMut + RawDataClone,
         D: Dimension + RemoveAxis,
     {
         match self {
@@ -48,14 +48,14 @@ impl Transform<Real, Real> for Base {
         }
     }
 
-    fn backward<R, S, D>(
+    fn backward<S1, S2, D>(
         &mut self,
-        input: &mut ArrayBase<R, D>,
-        output: &mut ArrayBase<S, D>,
+        input: &mut ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
         axis: usize,
     ) where
-        R: Data<Elem = Real> + DataMut + RawDataClone,
-        S: Data<Elem = Real> + DataMut + RawDataClone,
+        S1: Data<Elem = Real> + DataMut + RawDataClone,
+        S2: Data<Elem = Real> + DataMut + RawDataClone,
         D: Dimension + RemoveAxis,
     {
         match self {
@@ -68,28 +68,28 @@ impl Transform<Real, Real> for Base {
 
 /// Defines transform from physical to spectral space and vice versa,
 /// together with other methods that all Bases should implement.
-#[enum_dispatch]
-pub trait Transform<A, B> {
+//#[enum_dispatch]
+pub trait Transform<T> {
     /// Transform array from physical to spectral space along axis
-    fn forward<R, S, D>(
+    fn forward<S1, S2, D>(
         &mut self,
-        input: &mut ArrayBase<R, D>,
-        output: &mut ArrayBase<S, D>,
+        input: &mut ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
         axis: usize,
     ) where
-        R: Data<Elem = A> + DataMut + RawDataClone,
-        S: Data<Elem = B> + DataMut + RawDataClone,
+        S1: Data<Elem = Real> + DataMut + RawDataClone,
+        S2: Data<Elem = T> + DataMut + RawDataClone,
         D: Dimension + RemoveAxis;
 
     /// Transform array from physical to spectral space along axis
-    fn backward<R, S, D>(
+    fn backward<S1, S2, D>(
         &mut self,
-        input: &mut ArrayBase<R, D>,
-        output: &mut ArrayBase<S, D>,
+        input: &mut ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
         axis: usize,
     ) where
-        R: Data<Elem = A> + DataMut + RawDataClone,
-        S: Data<Elem = B> + DataMut + RawDataClone,
+        S1: Data<Elem = T> + DataMut + RawDataClone,
+        S2: Data<Elem = Real> + DataMut + RawDataClone,
         D: Dimension + RemoveAxis;
 }
 
@@ -97,16 +97,40 @@ pub trait Transform<A, B> {
 #[enum_dispatch]
 pub trait Differentiate {
     /// Differentiate n_times along axis (performed in spectral space)
-    fn differentiate<T, R, S, D>(
+    fn differentiate<T, S1, S2, D>(
         &self,
-        input: &ArrayBase<R, D>,
-        output: &mut ArrayBase<S, D>,
+        input: &ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
         n_times: usize,
         axis: usize,
     ) where
         T: LinalgScalar + Send + From<f64>,
         f64: Into<T>,
-        R: Data<Elem = T>,
-        S: Data<Elem = T> + RawDataClone + DataMut,
+        S1: Data<Elem = T>,
+        S2: Data<Elem = T> + RawDataClone + DataMut,
         D: Dimension;
+}
+
+/// Return mass matrix and size of basis
+#[enum_dispatch]
+pub trait Mass {
+    /// Return mass matrix
+    fn mass<T>(&self) -> Array2<T>
+    where
+        T: LinalgScalar + From<f64>;
+    /// Return size of basis
+    fn size(&self) -> usize;
+}
+
+/// Define (Pseudo-) Inverse of Laplacian
+#[enum_dispatch]
+pub trait LaplacianInverse {
+    /// Pseudoinverse mtrix of Laplacian
+    fn pinv<T>(&self) -> Array2<T>
+    where
+        T: LinalgScalar + From<f64>;
+    /// Pseudoidentity matrix of laplacian
+    fn pinv_eye<T>(&self) -> Array2<T>
+    where
+        T: LinalgScalar + From<f64>;
 }
