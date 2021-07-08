@@ -31,8 +31,10 @@ macro_rules! derive_composite {
             pub n: usize,
             /// Number of coefficients in composite space
             pub m: usize,
-            parent: $p,
-            stencil: $s,
+            /// Parent base
+            pub parent: $p,
+            /// Transform stencil
+            pub stencil: $s,
         }
 
         impl $i {
