@@ -179,7 +179,7 @@ impl Transform<Real> for Chebyshev {
         S2: Data<Elem = Real> + DataMut,
         D: Dimension + RemoveAxis,
     {
-        use ndrustfft::nddct1;
+        use ndrustfft::nddct1_par as nddct1;
         self.check_array(input, axis);
         self.check_array(output, axis);
         // discrete cosine tranform (type 1)
@@ -226,7 +226,7 @@ impl Transform<Real> for Chebyshev {
         S2: Data<Elem = Real> + DataMut,
         D: Dimension + RemoveAxis,
     {
-        use ndrustfft::nddct1;
+        use ndrustfft::nddct1_par as nddct1;
         self.check_array(input, axis);
         self.check_array(output, axis);
         let mut buffer = input.clone();
@@ -281,20 +281,22 @@ impl Differentiate for Chebyshev {
     {
         self.check_array(input, axis);
         output.assign(&input);
-        Zip::from(output.lanes_mut(Axis(axis))).par_for_each(|mut out| {
-            for _ in 0..n_times {
-                out[0] = out[1];
-                for i in 1..out.len() - 1 {
-                    out[i] = (2. * (i as f64 + 1.)).into() * out[i + 1];
+        if n_times > 0 {
+            Zip::from(output.lanes_mut(Axis(axis))).par_for_each(|mut out| {
+                for _ in 0..n_times {
+                    out[0] = out[1];
+                    for i in 1..out.len() - 1 {
+                        out[i] = (2. * (i as f64 + 1.)).into() * out[i + 1];
+                    }
+                    out[self.n - 1] = T::zero();
+                    // Add d_x(T_(n-2))
+                    for i in (1..self.n - 2).rev() {
+                        out[i] = out[i] + out[i + 2];
+                    }
+                    out[0] = out[0] + out[2] / 2.0.into();
                 }
-                out[self.n - 1] = T::zero();
-                // Add d_x(T_(n-2))
-                for i in (1..self.n - 2).rev() {
-                    out[i] = out[i] + out[i + 2];
-                }
-                out[0] = out[0] + out[2] / 2.0.into();
-            }
-        });
+            });
+        }
     }
 }
 
@@ -388,6 +390,46 @@ derive_composite!(
     Real
 );
 
+derive_composite!(
+    /// # DirichletBc
+    /// Composite set of basis functions based on Chebyshev polynomials
+    /// for Dirichlet boundary conditions.
+    ///
+    /// This basis should only be used for inhomogeneous BC's together
+    /// with [`ChebDirichlet`]
+    ///
+    /// # Examples
+    /// ```
+    /// use ndspectral::bases::DirichletBc;
+    /// let cd = DirichletBc::new(10);
+    /// ```
+    DirichletBc,
+    Chebyshev,
+    StencilChebyshevBoundary,
+    dirichlet,
+    Real
+);
+
+derive_composite!(
+    /// # NeumannBc
+    /// Composite set of basis functions based on Chebyshev polynomials
+    /// for Neummann boundary conditions.
+    ///
+    /// This basis should only be used for inhomogeneous BC's together
+    /// with [`ChebNeumann`]
+    ///
+    /// # Examples
+    /// ```
+    /// use ndspectral::bases::NeumannBc;
+    /// let cd = NeumannBc::new(10);
+    /// ```
+    NeumannBc,
+    Chebyshev,
+    StencilChebyshevBoundary,
+    dirichlet,
+    Real
+);
+
 /// Stencil for composite chebyshev bases.
 ///
 /// chebdirichlet:
@@ -465,6 +507,11 @@ impl StencilChebyshev {
     {
         self.check_array(composite, axis, self.m);
         self.check_array(parent, axis, self.n);
+
+        for p in parent.iter_mut() {
+            *p = T::zero();
+        }
+
         Zip::from(parent.lanes_mut(Axis(axis)))
             .and(composite.lanes(Axis(axis)))
             .for_each(|mut p, c| {
@@ -495,8 +542,8 @@ impl StencilChebyshev {
         D: Dimension,
         //Lanes<'_, T, <D as ndarray::Dimension>::Smaller>: Send,
     {
-        self.check_array(composite, axis, self.m);
         self.check_array(parent, axis, self.n);
+        self.check_array(composite, axis, self.m);
 
         // Construct diagonal of S^T@S which is symmetric
         let mut d = Array1::zeros(self.m);
@@ -506,6 +553,10 @@ impl StencilChebyshev {
         }
         for (i, x) in u.iter_mut().enumerate() {
             *x = (self.diag[i + 2] * self.low2[i]).into();
+        }
+
+        for c in composite.iter_mut() {
+            *c = T::zero();
         }
 
         Zip::from(parent.lanes(Axis(axis)))
@@ -586,7 +637,7 @@ impl StencilChebyshev {
     {
         assert!(
             n == data.shape()[axis],
-            "Size mismatch in fft, got {} expected {}",
+            "Size mismatch in StencilChebyshev, got {} expected {}",
             data.shape()[axis],
             n
         );
@@ -595,6 +646,177 @@ impl StencilChebyshev {
     /// Return size of spectral space (number of coefficients) from size in physical space
     pub fn get_m(n: usize) -> usize {
         n - 2
+    }
+}
+
+/// Stencil for boundary conditions of chebyshev bases.
+///
+/// dirichlet_bc:
+/// .. math::
+///     phi_0 = 0.5*T_0 - 0.5*T_1
+///     phi_1 = 0.5*T_0 + 0.5*T_1
+///
+/// neumann_bc:
+/// .. math::
+///     phi_0 = 0.5*T_0 - 1/8*T_1
+///     phi_1 = 0.5*T_0 + 1/8*T_1
+///
+/// This stencil is fully defined by the
+/// the 2 coefficients that act on 'T_0' and the
+/// 2 coefficients that act on 'T_1'
+pub struct StencilChebyshevBoundary {
+    /// Number of coefficients in parent space
+    n: usize,
+    /// Number of coefficients in parent space
+    m: usize,
+    /// T0
+    t0: Array1<Real>,
+    /// T1
+    t1: Array1<Real>,
+}
+
+impl StencilChebyshevBoundary {
+    /// dirichlet_bc basis
+    /// .. math::
+    ///     phi_0 = 0.5*T_0 - 0.5*T_1
+    ///     phi_1 = 0.5*T_0 + 0.5*T_1
+    ///
+    /// # Example
+    ///```
+    /// use ndspectral::bases::chebyshev::StencilChebyshevBoundary;
+    /// let stencil = StencilChebyshevBoundary::dirichlet(5);
+    ///```
+    pub fn dirichlet(n: usize) -> Self {
+        let m = Self::get_m(n);
+        let t0 = Array::from_vec(vec![0.5, 0.5]);
+        let t1 = Array::from_vec(vec![-0.5, 0.5]);
+        StencilChebyshevBoundary { n, m, t0, t1 }
+    }
+
+    /// neumann_bc basis
+    /// .. math::
+    ///     phi_0 = 0.5*T_0 - 0.5*T_1
+    ///     phi_1 = 0.5*T_0 + 0.5*T_1
+    ///
+    /// # Example
+    ///```
+    /// use ndspectral::bases::chebyshev::StencilChebyshevBoundary;
+    /// let stencil = StencilChebyshevBoundary::neumann(5);
+    ///```
+    pub fn neumann(n: usize) -> Self {
+        let m = Self::get_m(n);
+        let t0 = Array::from_vec(vec![0.5, 0.5]);
+        let t1 = Array::from_vec(vec![-1. / 8., 1. / 8.]);
+        StencilChebyshevBoundary { n, m, t0, t1 }
+    }
+
+    /// Multiply stencil with a vector. (see test)
+    pub fn to_parent<T, R, S, D>(
+        &self,
+        composite: &ArrayBase<R, D>,
+        parent: &mut ArrayBase<S, D>,
+        axis: usize,
+    ) where
+        T: LinalgScalar,
+        f64: Into<T>,
+        R: Data<Elem = T>,
+        S: Data<Elem = T> + DataMut,
+        D: Dimension,
+    {
+        self.check_array(composite, axis, self.m);
+        self.check_array(parent, axis, self.n);
+
+        for p in parent.iter_mut() {
+            *p = T::zero();
+        }
+
+        Zip::from(parent.lanes_mut(Axis(axis)))
+            .and(composite.lanes(Axis(axis)))
+            .for_each(|mut p, c| {
+                p[0] = self.t0[0].into() * c[0] + self.t0[1].into() * c[1];
+                p[1] = self.t1[0].into() * c[0] + self.t1[1].into() * c[1];
+            });
+    }
+
+    /// Mutliply inverse of stencil with a vector. (see test)
+    ///
+    /// This is done by solving a linear sytem, not
+    /// by actually calculating the inverse of S.
+    #[allow(clippy::many_single_char_names)]
+    pub fn from_parent<T, R, S, D>(
+        &self,
+        parent: &ArrayBase<R, D>,
+        composite: &mut ArrayBase<S, D>,
+        axis: usize,
+    ) where
+        T: LinalgScalar + std::ops::MulAssign,
+        f64: Into<T>,
+        R: Data<Elem = T>,
+        S: Data<Elem = T> + DataMut,
+        D: Dimension,
+        //Lanes<'_, T, <D as ndarray::Dimension>::Smaller>: Send,
+    {
+        self.check_array(composite, axis, self.m);
+        self.check_array(parent, axis, self.n);
+
+        for c in composite.iter_mut() {
+            *c = T::zero();
+        }
+
+        Zip::from(parent.lanes(Axis(axis)))
+            .and(composite.lanes_mut(Axis(axis)))
+            .for_each(|p, mut comp| {
+                //comp *= Array1T::zero();
+                // S^T @ c
+                let c0: T = self.t0[0].into() * p[0] + self.t1[0].into() * p[1];
+                let c1: T = self.t0[1].into() * p[0] + self.t1[1].into() * p[1];
+                // S^T@S = 2 x 2 matrix
+                let a: T =
+                    self.t0[0].into() * self.t0[0].into() + self.t1[0].into() * self.t1[0].into();
+                let b: T =
+                    self.t0[0].into() * self.t0[1].into() + self.t1[0].into() * self.t1[1].into();
+                let c: T =
+                    self.t0[1].into() * self.t0[0].into() + self.t1[1].into() * self.t1[0].into();
+                let d: T =
+                    self.t0[1].into() * self.t0[1].into() + self.t1[1].into() * self.t1[1].into();
+                // Inverse of 2x2 matrix
+                let det: T = 1.0.into() / (a * d - b * c);
+                comp[0] = det * (d * c0 - b * c1);
+                comp[1] = det * (a * c1 - c * c0);
+            });
+    }
+
+    fn check_array<T, S, D: Dimension>(&self, data: &ArrayBase<S, D>, axis: usize, n: usize)
+    where
+        T: LinalgScalar,
+        S: Data<Elem = T>,
+        D: Dimension,
+    {
+        assert!(
+            n == data.shape()[axis],
+            "Size mismatch in StencilChebyshevBoundary, got {} expected {}",
+            data.shape()[axis],
+            n
+        );
+    }
+
+    /// Returns transform stencil as 2d ndarray
+    pub fn to_array<T>(&self) -> Array2<T>
+    where
+        T: LinalgScalar,
+        f64: Into<T>,
+    {
+        let mut mat = Array2::<f64>::zeros((self.n, self.m).f());
+        mat[[0, 0]] = self.t0[0];
+        mat[[0, 1]] = self.t0[1];
+        mat[[1, 0]] = self.t1[0];
+        mat[[1, 1]] = self.t1[1];
+        mat.mapv(|elem| elem.into())
+    }
+
+    /// Return size of spectral space (number of coefficients) from size in physical space
+    pub fn get_m(_n: usize) -> usize {
+        2
     }
 }
 
@@ -934,6 +1156,21 @@ mod tests {
         let expected: Array1<f64> = Array::from_vec(vec![2., 0.7071, -1., -0.7071, -1.]);
         approx_eq(&parent, &expected);
         // frin_parent
+        let expected = composite.clone();
+        stencil.from_parent(&parent, &mut composite, 0);
+        approx_eq(&composite, &expected);
+    }
+
+    #[test]
+    fn test_stencil_dirichlet_bc() {
+        let stencil = StencilChebyshevBoundary::dirichlet(4);
+        // to_parent
+        let mut composite = Array::from_vec(vec![1., 2.]);
+        let mut parent = Array1::zeros(4);
+        stencil.to_parent(&composite, &mut parent, 0);
+        let expected: Array1<f64> = Array::from_vec(vec![1.5, 0.5, 0., 0.]);
+        approx_eq(&parent, &expected);
+        // from_parent
         let expected = composite.clone();
         stencil.from_parent(&parent, &mut composite, 0);
         approx_eq(&composite, &expected);

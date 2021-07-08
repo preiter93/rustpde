@@ -66,17 +66,19 @@ use ndarray::{Data, DataMut};
 ///
 ///    g = Qx ghat = self.q.dot(ghat)
 #[derive(Debug)]
-pub struct FdmaTensor<const N: usize> {
+pub struct FdmaTensor<T, const N: usize> {
     n: usize,
-    fdma: [Fdma<f64>; 2],
-    // Replace with [_;N-1], when const generic operations are stable
-    fwd: Vec<Option<Array2<f64>>>, // Multiply before, of size (N-1)
-    bwd: Vec<Option<Array2<f64>>>, // Multiply after, of size (N-1)
-    lam: Vec<Array1<f64>>,         // Eigenvalues, of size (N-1)
+    fdma: [Fdma<T>; 2],
+    /// Multiply before, of size (N-1)
+    fwd: Vec<Option<Array2<T>>>,
+    /// Multiply after, of size (N-1)
+    bwd: Vec<Option<Array2<T>>>,
+    /// Eigenvalues, of size (N-1)
+    pub lam: Vec<Array1<T>>,
     singular: bool,
 }
 
-impl<const N: usize> FdmaTensor<N> {
+impl<const N: usize> FdmaTensor<f64, N> {
     /// Supply array of matrices a and c, as defined in the definition of FdmaTensor.
     ///
     /// Eigendecompoiton:
@@ -136,7 +138,7 @@ impl<const N: usize> FdmaTensor<N> {
     }
 }
 
-impl Solve<f64, Ix1> for FdmaTensor<1> {
+impl Solve<f64, Ix1> for FdmaTensor<f64, 1> {
     /// Solve 1-D Problem with real in and output
     fn solve<S1: Data<Elem = f64>, S2: Data<Elem = f64> + DataMut>(
         &self,
@@ -156,7 +158,7 @@ impl Solve<f64, Ix1> for FdmaTensor<1> {
 }
 
 #[allow(unused_variables)]
-impl Solve<f64, Ix2> for FdmaTensor<2> {
+impl Solve<f64, Ix2> for FdmaTensor<f64, 2> {
     /// Solve 2-D Problem with real in and output
     fn solve<S1: Data<Elem = f64>, S2: Data<Elem = f64> + DataMut>(
         &self,
@@ -182,7 +184,7 @@ impl Solve<f64, Ix2> for FdmaTensor<2> {
         }
 
         // Step 2: Solve along y (but iterate over all lanes in x)
-        let mut helper = Array1::<f64>::zeros(output.shape()[0]);
+        let mut helper = Array1::<f64>::zeros(output.shape()[1]);
         Zip::from(output.outer_iter_mut())
             .and(self.lam[0].outer_iter())
             .for_each(|mut out, lam| {
@@ -280,8 +282,6 @@ mod tests {
 
         let solver = FdmaTensor::from_matrix([&a, &a], [&c, &c], [&false, &false]);
         solver.solve(&data, &mut result, 0);
-        println!("{:?}", result);
-        // let recover: Array<f64, Dim<[Ix; 1]>> = matrix.dot(&result);
 
         // Recover b
         let x = result.clone();

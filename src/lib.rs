@@ -18,14 +18,18 @@
 extern crate enum_dispatch;
 pub mod bases;
 pub mod field;
+pub mod hdf5;
+pub mod integrate;
 pub mod solver;
+pub mod space;
 pub use bases::{cheb_dirichlet, cheb_neumann, chebyshev};
 pub use bases::{Base, Differentiate, Transform};
-pub use field::{Field, Field2, Space};
-use ndrustfft::Complex as Cmplx;
-pub use solver::{Solver, SolverScalar};
+pub use field::{Field, Field1, Field2};
+pub use integrate::{integrate, Integrate};
+pub use solver::{Solver, SolverField, SolverScalar};
+pub use space::{Space, Space1, Space2, Spaced};
 
 /// Real type
 pub type Real = f64;
-/// Complex type
-pub type Complex = Cmplx<f64>;
+// Complex type
+// pub type Complex = Cmplx<f64>;
