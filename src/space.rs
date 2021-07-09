@@ -1,5 +1,5 @@
 //! Space initializes Field
-use crate::bases::Size;
+use crate::bases::{Mass, Size};
 use crate::{Base, Real};
 use ndarray::prelude::*;
 use ndarray::Ix;
@@ -19,9 +19,9 @@ pub trait Spaced<T, const N: usize> {
     /// Return array of coordinates [x,y,..]
     fn get_x(&self) -> [Array1<f64>; N];
     /// Return array of enum Base
-    fn get_bases(&self) -> &[Base; N];
+    fn get_bases(&self) -> &[Base<f64>; N];
     /// Return array of enum Base
-    fn get_bases_mut(&mut self) -> &mut [Base; N];
+    fn get_bases_mut(&mut self) -> &mut [Base<f64>; N];
 }
 
 /// Create multidimensional space
@@ -29,12 +29,12 @@ pub trait Spaced<T, const N: usize> {
 /// First create a space, then
 /// initialize field with it.
 pub struct Space<const N: usize> {
-    bases: [Base; N],
+    bases: [Base<f64>; N],
 }
 
 impl<const N: usize> Space<N> {
     /// Return new space
-    pub fn new(bases: [Base; N]) -> Self {
+    pub fn new(bases: [Base<f64>; N]) -> Self {
         Space { bases }
     }
 
@@ -62,11 +62,11 @@ impl<T> Spaced<T, 1> for Space<1>
 where
     T: num_traits::Zero + Clone,
 {
-    fn get_bases(&self) -> &[Base; 1] {
+    fn get_bases(&self) -> &[Base<f64>; 1] {
         &self.bases
     }
 
-    fn get_bases_mut(&mut self) -> &mut [Base; 1] {
+    fn get_bases_mut(&mut self) -> &mut [Base<f64>; 1] {
         &mut self.bases
     }
 
@@ -87,11 +87,11 @@ impl<T> Spaced<T, 2> for Space<2>
 where
     T: num_traits::Zero + Clone,
 {
-    fn get_bases(&self) -> &[Base; 2] {
+    fn get_bases(&self) -> &[Base<f64>; 2] {
         &self.bases
     }
 
-    fn get_bases_mut(&mut self) -> &mut [Base; 2] {
+    fn get_bases_mut(&mut self) -> &mut [Base<f64>; 2] {
         &mut self.bases
     }
 

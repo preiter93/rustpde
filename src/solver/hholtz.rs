@@ -69,41 +69,37 @@ where
     }
 
     /// Returns the solver for the lhs, depending on the base
-    fn solver_from_base(base: &Base, c: f64) -> Solver<T> {
+    fn solver_from_base(base: &Base<f64>, c: f64) -> Solver<T> {
         use crate::bases::LaplacianInverse;
         use crate::bases::Mass;
-        let mass = base.mass::<T>();
+        let mass = base.mass();
         match base {
             Base::Chebyshev(ref b) => {
-                let pinv = b.pinv::<T>();
-                let eye = b.pinv_eye::<T>();
+                let pinv = b.laplace_inv();
+                let eye = b.laplace_inv_eye();
                 let mat = eye.dot(&pinv).dot(&mass.slice(ndarray::s![.., 2..]))
-                    - eye.dot(&mass.slice(ndarray::s![.., 2..])) * c.into();
+                    - eye.dot(&mass.slice(ndarray::s![.., 2..])) * c;
+                let mat = mat.mapv(|elem| elem.into());
                 Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
             }
-            Base::ChebDirichlet(ref b) => {
-                let pinv = b.pinv();
-                let eye = b.pinv_eye();
-                let mat = eye.dot(&pinv).dot(&mass) - eye.dot(&mass) * c.into();
+            Base::CompositeChebyshev(ref b) => {
+                let pinv = b.laplace_inv();
+                let eye = b.laplace_inv_eye();
+                let mat = eye.dot(&pinv).dot(&mass) - eye.dot(&mass) * c;
+                let mat = mat.mapv(|elem| elem.into());
                 Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
-            }
-            Base::ChebNeumann(ref b) => {
-                let pinv = b.pinv();
-                let eye = b.pinv_eye();
-                let mat = eye.dot(&pinv).dot(&mass) - eye.dot(&mass) * c.into();
-                Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
-            } //Base::Fourier(_) => panic!("Not Implemented"),
-            _ => todo!(),
+            } //_ => todo!(),
         }
     }
 
     /// Returns the solver for the rhs, depending on the base
     #[allow(clippy::unnecessary_wraps)]
-    fn matvec_from_base(base: &Base) -> Option<MatVec<T>> {
+    fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<T>> {
         use crate::bases::LaplacianInverse;
         use crate::solver::MatVecDot;
-        let pinv = base.pinv();
+        let pinv = base.laplace_inv();
         let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
+        let mat = mat.mapv(|elem| elem.into());
         let matvec = MatVec::MatVecDot(MatVecDot::new(&mat));
         Some(matvec)
     }

@@ -188,13 +188,14 @@ impl Navier2D {
     /// at the top
     fn _rbc(&mut self) {
         //use crate::space::Spaced;
-        use crate::bases::Chebyshev;
+        //use crate::bases::Chebyshev;
         use crate::bases::Transform;
         // Apply boundary conditions
         let nx = self.temp.v.shape()[0];
         let ny = self.temp.v.shape()[1];
         let bases = [chebyshev(nx), cheb_dirichlet_bc(ny)];
         let mut fieldbc = Field2::new(Space2::new(bases));
+        let mut bases = [chebyshev(nx), cheb_dirichlet_bc(ny)];
 
         let mut bc = fieldbc.vhat.to_owned();
         // bottom
@@ -210,8 +211,8 @@ impl Navier2D {
                 *b = -0.5;
             });
 
-        let mut base = Chebyshev::new(nx);
-        base.forward(&mut bc, &mut fieldbc.vhat, 0);
+        //let mut base = Chebyshev::new(nx);
+        bases[0].forward_inplace(&mut bc, &mut fieldbc.vhat, 0);
         fieldbc.backward();
         fieldbc.forward();
         // Set fieldbc

@@ -16,6 +16,7 @@ ndrustfft = "0.1.1"
 enum_dispatch = "0.3.7"
 num-traits = "0.2.12"
 hdf5 = "0.7.1"
+funspace = { path = "funspace" }
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }
