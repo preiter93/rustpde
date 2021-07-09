@@ -2,15 +2,14 @@
 #![allow(dead_code)]
 pub mod read;
 pub mod write;
-use crate::bases::Differentiate;
-use crate::bases::Parental;
-use crate::bases::Size;
 use crate::bases::Transform;
-use crate::space::{Space1, Space2, Spaced};
+use crate::bases::FromOrtho;
+use crate::bases::Differentiate;
 use crate::{Real, SolverField};
 use ndarray::prelude::*;
 use ndarray::Ix;
 use std::collections::HashMap;
+use crate::space::{Space1, Space2, Spaced};
 
 /// One dimensional Field
 pub type Field1 = Field<Space1, f64, 1>;
@@ -95,28 +94,26 @@ where
 impl<S: Spaced<f64, 1>> Field<S, Real, 1> {
     /// Forward transform 1d
     pub fn forward(&mut self) {
-        self.space.get_bases_mut()[0].forward(&mut self.v, &mut self.vhat, 0);
+        self.space.get_bases_mut()[0].forward_inplace(&mut self.v, &mut self.vhat, 0);
     }
     /// Backward transform 1d
     pub fn backward(&mut self) {
-        self.space.get_bases_mut()[0].backward(&mut self.vhat, &mut self.v, 0);
+        self.space.get_bases_mut()[0].backward_inplace(&mut self.vhat, &mut self.v, 0);
     }
 
     /// Transform to parent space
     pub fn to_parent(&self) -> Array1<Real> {
-        self.space.get_bases()[0].to_parent(&self.vhat, 0)
+        self.space.get_bases()[0].to_ortho(&self.vhat, 0)
     }
 
     /// Transform to child space
     pub fn from_parent(&mut self, input: &Array1<f64>) {
-        self.vhat
-            .assign(&self.space.get_bases()[0].from_parent(input, 0))
+        self.vhat.assign(&self.space.get_bases()[0].from_ortho(input, 0))
     }
 
     /// Gradient
     fn grad(&self, deriv: [usize; 1], scale: Option<[f64; 1]>) -> Array1<Real> {
-        let mut output = Array1::<f64>::zeros(self.v.raw_dim());
-        self.space.get_bases()[0].differentiate(&self.vhat, &mut output, deriv[0], 0);
+        let mut output = self.space.get_bases()[0].differentiate(&self.vhat,deriv[0],0);
         if let Some(s) = scale {
             output /= s[0].powi(deriv[0] as i32);
         }
@@ -124,51 +121,36 @@ impl<S: Spaced<f64, 1>> Field<S, Real, 1> {
     }
 }
 
+
+
 impl<S: Spaced<f64, 2>> Field<S, Real, 2> {
     /// Forward transform 2d
     pub fn forward(&mut self) {
-        let shape = [
-            self.space.get_bases()[0].len_phys(),
-            self.space.get_bases()[1].len_spec(),
-        ];
-        let mut buffer = Array2::<f64>::zeros(shape);
-        self.space.get_bases_mut()[1].forward(&mut self.v, &mut buffer, 1);
-        self.space.get_bases_mut()[0].forward(&mut buffer, &mut self.vhat, 0);
+        let mut buffer = self.space.get_bases_mut()[1].forward(&mut self.v, 1);
+        self.space.get_bases_mut()[0].forward_inplace(&mut buffer, &mut self.vhat, 0);
     }
     /// Backward transform 2d
     pub fn backward(&mut self) {
-        let shape = [
-            self.space.get_bases()[0].len_phys(),
-            self.space.get_bases()[1].len_spec(),
-        ];
-        let mut buffer = Array2::<f64>::zeros(shape);
-        self.space.get_bases_mut()[0].backward(&mut self.vhat, &mut buffer, 0);
-        self.space.get_bases_mut()[1].backward(&mut buffer, &mut self.v, 1);
+        let mut buffer = self.space.get_bases_mut()[0].backward(&mut self.vhat, 0);
+        self.space.get_bases_mut()[1].backward_inplace(&mut buffer, &mut self.v, 1);
     }
 
     /// Transform to parent space
     pub fn to_parent(&self) -> Array2<Real> {
-        let axis0 = self.space.get_bases()[0].to_parent(&self.vhat, 0);
-        self.space.get_bases()[1].to_parent(&axis0, 1)
+        let axis0 = self.space.get_bases()[0].to_ortho(&self.vhat, 0);
+        self.space.get_bases()[1].to_ortho(&axis0, 1)
     }
 
     /// Transform to child space
     pub fn from_parent(&mut self, input: &Array2<f64>) {
-        let axis0 = self.space.get_bases()[0].from_parent(input, 0);
-        self.vhat
-            .assign(&self.space.get_bases()[1].from_parent(&axis0, 1));
+        let axis0 = self.space.get_bases()[0].from_ortho(input, 0);
+        self.vhat.assign(&self.space.get_bases()[1].from_ortho(&axis0, 1));
     }
 
     /// Gradient
     pub fn grad(&self, deriv: [usize; 2], scale: Option<[f64; 2]>) -> Array2<Real> {
-        let mut output = Array2::<f64>::zeros(self.v.raw_dim());
-        let shape = [
-            self.space.get_bases()[0].len_phys(),
-            self.space.get_bases()[1].len_spec(),
-        ];
-        let mut buffer = Array2::<f64>::zeros(shape);
-        self.space.get_bases()[0].differentiate(&self.vhat, &mut buffer, deriv[0], 0);
-        self.space.get_bases()[1].differentiate(&buffer, &mut output, deriv[1], 1);
+        let buffer = self.space.get_bases()[0].differentiate(&self.vhat,deriv[0],0);
+        let mut output = self.space.get_bases()[1].differentiate(&buffer,deriv[1],1);
         if let Some(s) = scale {
             output /= s[0].powi(deriv[0] as i32);
             output /= s[1].powi(deriv[1] as i32);

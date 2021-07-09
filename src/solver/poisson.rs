@@ -140,36 +140,33 @@ impl<const N: usize> Poisson<f64, N> {
             .collect()
     }
 
-    fn is_diag(base: &Base) -> bool {
+    fn is_diag(base: &Base<f64>) -> bool {
         match base {
-            Base::Chebyshev(_) | Base::ChebDirichlet(_) | Base::ChebNeumann(_) => false,
-            _ => todo!(),
+            Base::Chebyshev(_) | Base::CompositeChebyshev(_) => false,
+            //_ => todo!(),
         }
     }
 
     /// Returns the solver for the lhs, depending on the base
-    fn matrix_from_base(base: &Base, c: f64) -> (Array2<f64>, Array2<f64>) {
+    fn matrix_from_base(base: &Base<f64>, c: f64) -> (Array2<f64>, Array2<f64>) {
         let mass = base.mass();
-        let pinv = base.pinv();
-        let eye = base.pinv_eye();
+        let pinv = base.laplace_inv();
+        let eye = base.laplace_inv_eye();
         let c_t: f64 = c;
         match base {
             Base::Chebyshev(_) => (
                 eye.dot(&mass) * c_t,
                 (eye.dot(&pinv)).dot(&mass.slice(s![.., 2..])),
             ),
-            Base::ChebDirichlet(_) | Base::ChebNeumann(_) => {
-                (eye.dot(&mass) * c_t, (eye.dot(&pinv)).dot(&mass))
-            }
-            _ => todo!(),
+            Base::CompositeChebyshev(_) => (eye.dot(&mass) * c_t, (eye.dot(&pinv)).dot(&mass)), // _ => todo!(),
         }
     }
 
     /// Returns the solver for the rhs, depending on the base
     #[allow(clippy::unnecessary_wraps)]
-    fn matvec_from_base(base: &Base) -> Option<MatVec<f64>> {
+    fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<f64>> {
         use crate::solver::MatVecDot;
-        let pinv = base.pinv();
+        let pinv = base.laplace_inv();
         let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
         let matvec = MatVec::MatVecDot(MatVecDot::new(&mat));
         Some(matvec)

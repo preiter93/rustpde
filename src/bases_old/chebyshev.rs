@@ -535,7 +535,7 @@ impl StencilChebyshev {
         composite: &mut ArrayBase<S, D>,
         axis: usize,
     ) where
-        T: LinalgScalar,
+        T: LinalgScalar + std::fmt::Debug,
         f64: Into<T>,
         R: Data<Elem = T>,
         S: Data<Elem = T> + DataMut,
@@ -1159,6 +1159,7 @@ mod tests {
         let expected = composite.clone();
         stencil.from_parent(&parent, &mut composite, 0);
         approx_eq(&composite, &expected);
+        assert!(1==2);
     }
 
     #[test]

@@ -1,4 +1,6 @@
 //! # Collection of linear algebra Solver
+//!
+//! Must be updated ...
 pub mod fdma;
 pub mod fdma_tensor;
 pub mod hholtz;
