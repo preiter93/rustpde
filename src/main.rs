@@ -5,11 +5,11 @@ use rustpde::integrate;
 use rustpde::integrate::navier::Navier2D;
 
 fn main() {
-    let (nx, ny) = (64, 64);
+    let (nx, ny) = (129, 64);
     let ra = 1e5;
     let pr = 1.;
     let adiabatic = true;
-    let aspect = 1.0;
+    let aspect = 3.0;
     let dt = 0.01;
     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
     //navier.read("data/flow40.000.h5");

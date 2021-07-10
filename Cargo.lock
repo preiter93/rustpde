@@ -261,10 +261,12 @@ dependencies = [
 [[package]]
 name = "funspace"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85a4c7a240dabb92c7451144d1013a9db994cbb6b67d8b96a91671d1eb89ae6a"
 dependencies = [
  "enum_dispatch",
  "ndarray 0.15.3",
- "ndrustfft 0.1.1 (git+https://github.com/preiter93/ndrustfft?branch=main)",
+ "ndrustfft",
  "num-traits",
 ]
 
@@ -554,19 +556,9 @@ dependencies = [
 
 [[package]]
 name = "ndrustfft"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b2c2d8832047ac017cf1cd230efdfb28e7ed49c68fdd76cb1066a11d9151166"
-dependencies = [
- "ndarray 0.15.3",
- "num-traits",
- "rustfft",
-]
-
-[[package]]
-name = "ndrustfft"
-version = "0.1.1"
-source = "git+https://github.com/preiter93/ndrustfft?branch=main#130a2fad9473e168f04feeb4f50936fa0af68349"
+checksum = "f0fc099082d06b409a4f26fd16a482933f789c5e3668422bd690d1444e5860f4"
 dependencies = [
  "ndarray 0.15.3",
  "num-traits",
@@ -895,7 +887,6 @@ dependencies = [
  "ndarray 0.14.0",
  "ndarray 0.15.3",
  "ndarray-linalg",
- "ndrustfft 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits",
 ]
 
