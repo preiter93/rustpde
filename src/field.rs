@@ -68,9 +68,9 @@ where
     /// # Example
     /// 2-D field in chebyshev space
     ///```
-    /// use ndspectral::cheb_dirichlet;
-    /// use ndspectral::Space2;
-    /// use ndspectral::Field2;
+    /// use rustpde::cheb_dirichlet;
+    /// use rustpde::Space2;
+    /// use rustpde::Field2;
     /// let cdx = cheb_dirichlet(8);
     /// let cdy = cheb_dirichlet(6);
     /// let field = Field2::new(Space2::new([cdx,cdy]));

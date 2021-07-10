@@ -47,7 +47,7 @@ pub fn diag<T: LinalgScalar>(a: &Array2<T>, offset: i8) -> Array1<T> {
 /// Example
 /// ```
 /// use ndarray::array;
-/// use ndspectral::solver::utils::eig;
+/// use rustpde::solver::utils::eig;
 /// let test = array![
 ///         [1., 2., 3., 4., 5.],
 ///         [1., 2., 3., 4., 5.],
@@ -131,7 +131,7 @@ fn ndarray_vec_to_new<T: LinalgScalar>(old: &Array1_old<T>) -> Array1<T> {
 /// Returns permutation vector.
 ///
 /// ```
-/// use ndspectral::solver::utils::argsort;
+/// use rustpde::solver::utils::argsort;
 /// use ndarray::{array,Axis};
 /// let vec = array![3., 1., 2., 9., 7.];
 /// let permut: Vec<usize> = argsort(vec.as_slice().unwrap());

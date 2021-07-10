@@ -45,8 +45,8 @@ pub fn get_ka(ra: &f64, pr: &f64, height: &f64) -> f64 {
 /// # Examples
 ///
 /// ```
-/// use ndspectral::integrate::{integrate, Integrate, Navier2D};
-/// let (nx, ny) = (64, 64);
+/// use rustpde::integrate::{integrate, Integrate, Navier2D};
+/// let (nx, ny) = (33, 33);
 /// let ra = 1e5;
 /// let pr = 1.;
 /// let adiabatic = true;
@@ -55,7 +55,7 @@ pub fn get_ka(ra: &f64, pr: &f64, height: &f64) -> f64 {
 /// let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
 /// // Read initial field from file
 /// // navier.read("data/flow0.000.h5");
-/// integrate(navier, 20.0, Some(1.0));
+/// integrate(navier, 0.2,  None);
 /// ```
 pub struct Navier2D {
     field: Field2,
@@ -154,9 +154,7 @@ impl Navier2D {
             scale,
         };
         navier._scale();
-        //println!("**** Apply Rayleigh Benard Conditions ****");
         navier._rbc();
-        //println!("**** Apply Initial Conditions ****");
         //apply_sin_cos(&mut navier.temp, 0.2, 1., 1.);
         apply_sin_cos(&mut navier.ux, 0.2, 2., 1.);
         apply_cos_sin(&mut navier.uy, -0.2, 2., 1.);
@@ -182,7 +180,7 @@ impl Navier2D {
 
     /// Add field_bc to self, which defines the
     /// inhomogeneous temperature boundary conditions.
-
+    ///
     /// Specifically, add Rayleigh Benard Boundary
     /// Conditions with 0.5 at the bottom and 0.5
     /// at the top
@@ -224,9 +222,6 @@ impl Navier2D {
             *r = 0.;
         }
     }
-    //////////////////////////////////////
-    ///         Convection terms
-    //////////////////////////////////////
 
     /// Convection term for temperature
     fn conv_temp(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) -> Array2<f64> {
@@ -266,11 +261,9 @@ impl Navier2D {
         self.field.vhat.to_owned()
     }
 
-    /////////////////////////////////////////////////////
-    ///```
+    /// Solve horizontal momentum equation
+    ///
     /// (1 - dt*D) u_new = -dt*C(u) - dt*grad(p) + dt*f + u
-    ///```
-    /////////////////////////////////////////////////////
     fn solve_ux(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) {
         self.zero_rhs();
         // + old field
@@ -285,6 +278,7 @@ impl Navier2D {
         self.solver[0].solve(&self.rhs, &mut self.ux.vhat, 0);
     }
 
+    /// Solve vertical momentum equation
     fn solve_uy(&mut self, ux: &Array2<f64>, uy: &Array2<f64>, buoy: &Array2<f64>) {
         self.zero_rhs();
         // + old field
@@ -301,9 +295,7 @@ impl Navier2D {
         self.solver[1].solve(&self.rhs, &mut self.uy.vhat, 0);
     }
 
-    ///```
     /// Divergence: duxdx + duydy
-    ///```
     fn divergence(&mut self) -> Array2<f64> {
         self.zero_rhs();
         self.rhs += &self.ux.grad([1, 0], Some(self.scale));
@@ -312,10 +304,10 @@ impl Navier2D {
     }
 
     /// Correct velocity field.
-    ///```
+    ///
     /// uxnew = ux - c*dpdx
+    ///
     /// uynew = uy - c*dpdy
-    ///```
     fn project_velocity(&mut self, c: f64) {
         let dpdx = self.pres[1].grad([1, 0], Some(self.scale));
         let dpdy = self.pres[1].grad([0, 1], Some(self.scale));
@@ -333,11 +325,9 @@ impl Navier2D {
         self.uy.vhat += &uy_old;
     }
 
-    /////////////////////////////////////////////////////
-    ///```
+    /// Solve temperature equation:
+    ///
     /// (1 - dt*D) temp_new = -dt*C(temp) + dt*f_bc + temp
-    ///```
-    /////////////////////////////////////////////////////
     fn solve_temp(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) {
         self.zero_rhs();
         // + old field
@@ -355,12 +345,11 @@ impl Navier2D {
         self.solver[2].solve(&self.rhs, &mut self.temp.vhat, 0);
     }
 
-    /////////////////////////////////////////////////////
-    ///```
-    ///             D2 pres = f
-    ///```
+    /// Solve pressure poisson equation
+    ///
+    /// D2 pres = f
+    ///
     /// pseu: pseudo pressure ( in code it is pres\[1\] )
-    /////////////////////////////////////////////////////
     fn solve_pres(&mut self, f: &Array2<f64>) {
         //self.pres[1].vhat.assign(&self.solver[3].solve(&f));
         self.solver[3].solve(&f, &mut self.pres[1].vhat, 0);
@@ -375,9 +364,7 @@ impl Navier2D {
 }
 
 impl Integrate for Navier2D {
-    /////////////////////////////////////////////////////
     ///         Update Navier Stokes
-    /////////////////////////////////////////////////////
     fn update(&mut self) {
         // Buoyancy
         let mut that = self.temp.to_parent();
