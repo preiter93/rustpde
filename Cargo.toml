@@ -12,11 +12,11 @@ ndarray-02 = { package = "ndarray", version ="0.14" }
 ndarray-linalg = { version = "0.13", features = ["openblas-static"] }
 #nalgebra = "0.27.1"
 #nalgebra-lapack = "0.18.0"
-ndrustfft = "0.1.1"
+#ndrustfft = "0.1.1"
 enum_dispatch = "0.3.7"
 num-traits = "0.2.12"
 hdf5 = "0.7.1"
-funspace = { path = "funspace" }
+funspace = "0.1.0"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }

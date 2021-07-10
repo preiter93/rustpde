@@ -262,8 +262,9 @@ impl Navier2D {
     }
 
     /// Solve horizontal momentum equation
-    ///
-    /// (1 - dt*D) u_new = -dt*C(u) - dt*grad(p) + dt*f + u
+    /// $$
+    /// (1 - \delta t  \mathcal{D}) u_new = -dt*C(u) - \delta t grad(p) + \delta t f + u
+    /// $$
     fn solve_ux(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) {
         self.zero_rhs();
         // + old field
