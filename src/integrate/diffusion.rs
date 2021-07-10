@@ -16,8 +16,8 @@ use ndarray::{Array1, Array2};
 ///    (1-kappa*dt*D2) unew = uold
 ///
 ///```
-/// use ndspectral::*;
-/// use ndspectral::integrate::diffusion::Diffusion1D;
+/// use rustpde::*;
+/// use rustpde::integrate::diffusion::Diffusion1D;
 /// let bases = [cheb_dirichlet(7)];
 /// let mut field = Field::new(Space1::new(bases));
 /// let mut diff = Diffusion1D::new(field, 1.0, 0.1);
@@ -103,15 +103,15 @@ impl Integrate for Diffusion1D {
 ///    [(1-kappa*dt*D2_x) + (1-kappa*dt*D2_y)] unew = uold
 ///
 ///```
-/// use ndspectral::*;
-/// use ndspectral::integrate::diffusion::Diffusion2D;
+/// use rustpde::*;
+/// use rustpde::integrate::diffusion::Diffusion2D;
 /// let bases = [cheb_dirichlet(7), cheb_dirichlet(7)];
 /// let mut field = Field::new(Space2::new(bases));
 /// let mut diff = Diffusion2D::new(field, 1.0, 0.1);
 /// diff.impulse();
 /// diff.update();
 /// diff.write();
-/// integrate(diff,0.1,Some(0.01));
+/// integrate(diff,0.1,None);
 ///```
 pub struct Diffusion2D {
     field: Field2,

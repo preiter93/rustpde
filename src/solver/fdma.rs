@@ -126,8 +126,8 @@ where
 {
     /// # Example
     ///```
-    /// use ndspectral::solver::Fdma;
-    /// use ndspectral::solver::Solve;
+    /// use rustpde::solver::Fdma;
+    /// use rustpde::solver::Solve;
     /// use ndarray::prelude::*;
     /// let nx =  6;
     /// let mut data = Array1::<f64>::zeros(nx);

@@ -1,5 +1,5 @@
 [package]
-name = "ndspectral"
+name = "rustpde"
 version = "0.1.0"
 authors = ["preiter <phil.reiter93@gmail.com>"]
 edition = "2018"
@@ -22,7 +22,7 @@ funspace = { path = "funspace" }
 criterion = { version = "0.3", features = ["html_reports"] }
 
 [lib]
-name = "ndspectral"
+name = "rustpde"
 path = "src/lib.rs"
 
 [[bench]]

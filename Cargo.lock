@@ -574,21 +574,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ndspectral"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "enum_dispatch",
- "funspace",
- "hdf5",
- "ndarray 0.14.0",
- "ndarray 0.15.3",
- "ndarray-linalg",
- "ndrustfft 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "num-traits",
-]
-
-[[package]]
 name = "num-complex"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -897,6 +882,21 @@ dependencies = [
  "primal-check",
  "strength_reduce",
  "transpose",
+]
+
+[[package]]
+name = "rustpde"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "enum_dispatch",
+ "funspace",
+ "hdf5",
+ "ndarray 0.14.0",
+ "ndarray 0.15.3",
+ "ndarray-linalg",
+ "ndrustfft 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num-traits",
 ]
 
 [[package]]
