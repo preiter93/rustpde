@@ -1,5 +1,6 @@
 //! # Multidimensional field of basis functions
 #![allow(dead_code)]
+pub mod average;
 pub mod read;
 pub mod write;
 use crate::bases::Differentiate;
