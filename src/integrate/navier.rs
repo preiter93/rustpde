@@ -156,8 +156,8 @@ impl Navier2D {
         navier._scale();
         navier._rbc();
         //apply_sin_cos(&mut navier.temp, 0.2, 1., 1.);
-        apply_sin_cos(&mut navier.ux, 0.2, 2., 1.);
-        apply_cos_sin(&mut navier.uy, -0.2, 2., 1.);
+        apply_sin_cos(&mut navier.ux, 0.2, 1., 1.);
+        apply_cos_sin(&mut navier.uy, -0.2, 1., 1.);
         // Return
         navier
     }
