@@ -12,6 +12,6 @@ fn main() {
     let aspect = 1.0;
     let dt = 0.005;
     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
-    navier.read("data/flow1500.000.h5");
-    integrate(navier, 2000.0, Some(1.0));
+    // navier.read("data/flow1500.000.h5");
+    // integrate(navier, 2000.0, Some(1.0));
 }

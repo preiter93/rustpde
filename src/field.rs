@@ -2,14 +2,14 @@
 #![allow(dead_code)]
 pub mod read;
 pub mod write;
-use crate::bases::Transform;
-use crate::bases::FromOrtho;
 use crate::bases::Differentiate;
+use crate::bases::FromOrtho;
+use crate::bases::Transform;
+use crate::space::{Space1, Space2, Spaced};
 use crate::{Real, SolverField};
 use ndarray::prelude::*;
 use ndarray::Ix;
 use std::collections::HashMap;
-use crate::space::{Space1, Space2, Spaced};
 
 /// One dimensional Field
 pub type Field1 = Field<Space1, f64, 1>;
@@ -55,6 +55,8 @@ pub struct Field<S, T, const N: usize> {
     pub vhat: Array<T, Dim<[Ix; N]>>,
     /// Grid coordinates
     pub x: [Array1<f64>; N],
+    /// Grid deltas
+    pub dx: [Array1<f64>; N],
     /// Collection of mathematical solvers
     pub solvers: HashMap<String, SolverField<T, N>>,
 }
@@ -80,14 +82,38 @@ where
         let v = space.ndarr_phys();
         let vhat = space.ndarr_spec();
         let x = space.get_x();
+        let dx = Self::get_dx(&x);
         Field {
             ndim,
             space,
             v,
             vhat,
             x,
+            dx,
             solvers: HashMap::new(),
         }
+    }
+
+    /// Generate grid deltas from coordinates
+    fn get_dx(x_arr: &[Array1<f64>; N]) -> [Array1<f64>; N] {
+        use std::convert::TryInto;
+        let mut dx_vec = Vec::new();
+        for x in x_arr.iter() {
+            let mut dx = Array1::<f64>::zeros(x.len());
+            for (i, dxi) in dx.iter_mut().enumerate() {
+                let xs_left = if i == 0 { x[0] } else { (x[i] + x[i - 1]) / 2. };
+                let xs_right = if i == x.len() - 1 {
+                    x[x.len() - 1]
+                } else {
+                    (x[i + 1] + x[i]) / 2.
+                };
+                *dxi = xs_right - xs_left;
+            }
+            dx_vec.push(dx);
+        }
+        dx_vec.try_into().unwrap_or_else(|v: Vec<Array1<f64>>| {
+            panic!("Expected Vec of length {} but got {}", N, v.len())
+        })
     }
 }
 
@@ -108,20 +134,19 @@ impl<S: Spaced<f64, 1>> Field<S, Real, 1> {
 
     /// Transform to child space
     pub fn from_parent(&mut self, input: &Array1<f64>) {
-        self.vhat.assign(&self.space.get_bases()[0].from_ortho(input, 0))
+        self.vhat
+            .assign(&self.space.get_bases()[0].from_ortho(input, 0))
     }
 
     /// Gradient
     fn grad(&self, deriv: [usize; 1], scale: Option<[f64; 1]>) -> Array1<Real> {
-        let mut output = self.space.get_bases()[0].differentiate(&self.vhat,deriv[0],0);
+        let mut output = self.space.get_bases()[0].differentiate(&self.vhat, deriv[0], 0);
         if let Some(s) = scale {
             output /= s[0].powi(deriv[0] as i32);
         }
         output
     }
 }
-
-
 
 impl<S: Spaced<f64, 2>> Field<S, Real, 2> {
     /// Forward transform 2d
@@ -144,13 +169,14 @@ impl<S: Spaced<f64, 2>> Field<S, Real, 2> {
     /// Transform to child space
     pub fn from_parent(&mut self, input: &Array2<f64>) {
         let axis0 = self.space.get_bases()[0].from_ortho(input, 0);
-        self.vhat.assign(&self.space.get_bases()[1].from_ortho(&axis0, 1));
+        self.vhat
+            .assign(&self.space.get_bases()[1].from_ortho(&axis0, 1));
     }
 
     /// Gradient
     pub fn grad(&self, deriv: [usize; 2], scale: Option<[f64; 2]>) -> Array2<Real> {
-        let buffer = self.space.get_bases()[0].differentiate(&self.vhat,deriv[0],0);
-        let mut output = self.space.get_bases()[1].differentiate(&buffer,deriv[1],1);
+        let buffer = self.space.get_bases()[0].differentiate(&self.vhat, deriv[0], 0);
+        let mut output = self.space.get_bases()[1].differentiate(&buffer, deriv[1], 1);
         if let Some(s) = scale {
             output /= s[0].powi(deriv[0] as i32);
             output /= s[1].powi(deriv[1] as i32);
