@@ -8,6 +8,7 @@ use crate::solver::{Hholtz, Poisson, Solve, SolverField};
 use crate::Field2;
 use crate::Space2;
 use ndarray::{array, s, Array2, Zip};
+use std::collections::HashMap;
 
 /// Return viscosity from Ra, Pr, and height of the cell
 pub fn get_nu(ra: &f64, pr: &f64, height: &f64) -> f64 {
@@ -59,10 +60,14 @@ pub fn get_ka(ra: &f64, pr: &f64, height: &f64) -> f64 {
 /// ```
 pub struct Navier2D {
     field: Field2,
-    temp: Field2,
-    ux: Field2,
-    uy: Field2,
-    pres: [Field2; 2],
+    /// Temperature
+    pub temp: Field2,
+    /// Horizontal Velocity
+    pub ux: Field2,
+    /// Vertical Velocity
+    pub uy: Field2,
+    /// Pressure
+    pub pres: [Field2; 2],
     solver: [SolverField<f64, 2>; 4],
     rhs: Array2<f64>,
     fieldbc: Option<Field2>,
@@ -73,6 +78,8 @@ pub struct Navier2D {
     time: f64,
     dt: f64,
     scale: [f64; 2],
+    /// diagnostics like Nu, ...
+    pub diagnostics: HashMap<String, Vec<f64>>,
 }
 
 impl Navier2D {
@@ -136,6 +143,11 @@ impl Navier2D {
         ));
         let solver = [solver_ux, solver_uy, solver_temp, solver_pres];
         let rhs = Array2::zeros(temp.v.raw_dim());
+        // Diagnostics
+        let mut diagnostics = HashMap::new();
+        diagnostics.insert("time".to_string(), Vec::<f64>::new());
+        diagnostics.insert("Nu".to_string(), Vec::<f64>::new());
+        // Initialize
         let mut navier = Navier2D {
             field,
             temp,
@@ -152,12 +164,12 @@ impl Navier2D {
             time: 0.0,
             dt,
             scale,
+            diagnostics,
         };
         navier._scale();
         navier._rbc();
-        //apply_sin_cos(&mut navier.temp, 0.2, 1., 1.);
-        apply_sin_cos(&mut navier.ux, 0.2, 1., 1.);
-        apply_cos_sin(&mut navier.uy, -0.2, 1., 1.);
+        //self.set_temperature(0.2, 1., 1.);
+        navier.set_velocity(0.2, 1., 1.);
         // Return
         navier
     }
@@ -364,6 +376,23 @@ impl Navier2D {
     }
 }
 
+impl Navier2D {
+    /// Returns Nusselt number (heat flux at the plates)
+    fn eval_nu(&mut self) -> f64 {
+        //self.temp.backward();
+        self.field.vhat.assign(&self.temp.to_parent());
+        if let Some(field) = &self.fieldbc {
+            self.field.vhat += &field.to_parent();
+        }
+        //self.field.forward();
+        let mut dtdz = -self.field.grad([0, 1], None);
+        dtdz /= self.scale[1] * 0.5;
+        self.field.vhat.assign(&dtdz);
+        self.field.backward();
+        let x_avg = self.field.average_axis(0);
+        (x_avg[x_avg.len() - 1] + x_avg[0]) / 2.
+    }
+}
 impl Integrate for Navier2D {
     ///         Update Navier Stokes
     fn update(&mut self) {
@@ -405,6 +434,7 @@ impl Integrate for Navier2D {
     }
 
     fn write(&mut self) {
+        use std::io::Write;
         std::fs::create_dir_all("data").unwrap();
         let fname = format!("data/flow{:.*}.h5", 3, self.time);
         self.temp.backward();
@@ -436,11 +466,31 @@ impl Integrate for Navier2D {
 
         // I/O
         let div = self.divergence();
+        let nu = self.eval_nu();
         println!(
-            "time = {:4.2}      |div| = {:4.2e}",
+            "time = {:4.2}      |div| = {:4.2e}     Nu = {:4.2e}",
             self.time,
-            norm_l2(&div)
+            norm_l2(&div),
+            nu
         );
+
+        // diagnostics
+        if let Some(d) = self.diagnostics.get_mut("time") {
+            d.push(self.time);
+        }
+        if let Some(d) = self.diagnostics.get_mut("Nu") {
+            d.push(nu);
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)
+            .open("data/info.txt")
+            .unwrap();
+        //write!(file, "{} {}", time, nu);
+        if let Err(e) = writeln!(file, "{} {}", self.time, nu) {
+            eprintln!("Couldn't write to file: {}", e);
+        }
     }
 }
 
@@ -461,6 +511,21 @@ impl Navier2D {
         read_from_hdf5(&fname, "time", None, Hdf5::Array1(&mut time)).ok();
         self.time = time[0];
         println!(" <== {:?}", fname);
+    }
+
+    /// Initialize velocity with fourier modes
+    ///
+    /// ux = amp \* sin(nx)cos(mx)
+    /// uy = -amp \* cos(nx)sin(mx)
+    pub fn set_velocity(&mut self, amp: f64, m: f64, n: f64) {
+        apply_sin_cos(&mut self.ux, amp, n, m);
+        apply_cos_sin(&mut self.uy, -amp, n, m);
+    }
+    /// Initialize temperature with fourier modes
+    ///
+    /// temp = amp \* sin(nx)cos(mx)
+    pub fn set_temperature(&mut self, amp: f64, m: f64, n: f64) {
+        apply_sin_cos(&mut self.temp, amp, n, m);
     }
 }
 
