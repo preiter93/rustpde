@@ -5,7 +5,7 @@ pub mod navier;
 pub use conv_term::conv_term;
 pub use navier::Navier2D;
 
-const MAX_TIMESTEP: usize = 100000;
+const MAX_TIMESTEP: usize = 10000000;
 
 /// Integrate trait, step forward in time, and write results
 pub trait Integrate {
