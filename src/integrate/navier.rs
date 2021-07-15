@@ -1,5 +1,32 @@
-//! Solve 2-dimensional Navier-Stokes equations
-//! coupled with temperature equations
+//! # Direct numerical simulation
+//! Solver for 2-dimensional Navier-Stokes momentum equations
+//! coupled with temperature equation.
+//!
+//! # Example
+//! Solve 2-D Rayleigh Benard Convection
+//! ```ignore
+//! use rustpde::integrate;
+//! use rustpde::integrate::Navier2D;
+//! use rustpde::Integrate;
+//!
+//! fn main() {
+//!     // Parameters
+//!     let (nx, ny) = (64, 64);
+//!     let ra = 1e5;
+//!     let pr = 1.;
+//!     let adiabatic = true;
+//!     let aspect = 1.0;
+//!     let dt = 0.02;
+//!     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
+//!     // Set initial conditions
+//!     navier.set_velocity(0.2, 1., 1.);
+//!     // // Want to restart?
+//!     // navier.read("data/flow100.000.h5");
+//!     // Write first field
+//!     navier.write();
+//!     integrate(navier, 100., Some(1.0));
+//! }
+//! ```
 use super::conv_term;
 use super::Integrate;
 use crate::bases::{cheb_dirichlet, cheb_dirichlet_bc, cheb_neumann, chebyshev};
@@ -59,6 +86,7 @@ pub fn get_ka(ra: &f64, pr: &f64, height: &f64) -> f64 {
 /// integrate(navier, 0.2,  None);
 /// ```
 pub struct Navier2D {
+    /// Field for derivatives and transforms
     field: Field2,
     /// Temperature
     pub temp: Field2,
@@ -66,18 +94,28 @@ pub struct Navier2D {
     pub ux: Field2,
     /// Vertical Velocity
     pub uy: Field2,
-    /// Pressure
+    /// Pressure \[pres, pseudo pressure\]
     pub pres: [Field2; 2],
+    /// Collection of solvers \[ux, uy, temp, pres\]
     solver: [SolverField<f64, 2>; 4],
+    /// Buffer
     rhs: Array2<f64>,
-    fieldbc: Option<Field2>,
+    /// Field for temperature boundary condition
+    pub fieldbc: Option<Field2>,
+    /// Viscosity
     nu: f64,
+    /// Thermal diffusivity
     ka: f64,
-    ra: f64,
-    pr: f64,
-    time: f64,
-    dt: f64,
-    scale: [f64; 2],
+    /// Rayleigh number
+    pub ra: f64,
+    /// Prandtl number
+    pub pr: f64,
+    /// Time
+    pub time: f64,
+    /// Time step size
+    pub dt: f64,
+    /// Scale of phsical dimension \[scale_x, scale_y\]
+    pub scale: [f64; 2],
     /// diagnostics like Nu, ...
     pub diagnostics: HashMap<String, Vec<f64>>,
 }
@@ -121,9 +159,11 @@ impl Navier2D {
         // define additional fields
         let nx = temp.v.shape()[0];
         let ny = temp.v.shape()[1];
-        let pres = Field2::new(Space2::new([chebyshev(nx), chebyshev(ny)]));
-        let pseudo = Field2::new(Space2::new([cheb_neumann(nx), cheb_neumann(ny)]));
         let field = Field2::new(Space2::new([chebyshev(nx), chebyshev(ny)]));
+        let pres = [
+            Field2::new(Space2::new([chebyshev(nx), chebyshev(ny)])),
+            Field2::new(Space2::new([cheb_neumann(nx), cheb_neumann(ny)])),
+        ];
         // define solver
         let solver_ux = SolverField::Hholtz(Hholtz::from_field(
             &ux,
@@ -138,7 +178,7 @@ impl Navier2D {
             [dt * ka / scale[0].powf(2.), dt * ka / scale[1].powf(2.)],
         ));
         let solver_pres = SolverField::Poisson(Poisson::from_field(
-            &pseudo,
+            &pres[1],
             [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
         ));
         let solver = [solver_ux, solver_uy, solver_temp, solver_pres];
@@ -147,13 +187,15 @@ impl Navier2D {
         let mut diagnostics = HashMap::new();
         diagnostics.insert("time".to_string(), Vec::<f64>::new());
         diagnostics.insert("Nu".to_string(), Vec::<f64>::new());
+        diagnostics.insert("Nuvol".to_string(), Vec::<f64>::new());
+        diagnostics.insert("Re".to_string(), Vec::<f64>::new());
         // Initialize
         let mut navier = Navier2D {
             field,
             temp,
             ux,
             uy,
-            pres: [pres, pseudo],
+            pres,
             solver,
             rhs,
             fieldbc: None,
@@ -167,7 +209,8 @@ impl Navier2D {
             diagnostics,
         };
         navier._scale();
-        navier._rbc();
+        //navier._rbc();
+        navier.fieldbc = Self::bc_rbc(nx, ny);
         //self.set_temperature(0.2, 1., 1.);
         navier.set_velocity(0.2, 1., 1.);
         // Return
@@ -190,19 +233,16 @@ impl Navier2D {
         }
     }
 
-    /// Add field_bc to self, which defines the
-    /// inhomogeneous temperature boundary conditions.
+    /// Return field for rayleigh benard
+    /// type temperature boundary conditions:
     ///
-    /// Specifically, add Rayleigh Benard Boundary
-    /// Conditions with 0.5 at the bottom and 0.5
+    /// T = 0.5 at the bottom and T = -0.5
     /// at the top
-    fn _rbc(&mut self) {
+    pub fn bc_rbc(nx: usize, ny: usize) -> Option<Field2> {
         //use crate::space::Spaced;
         //use crate::bases::Chebyshev;
         use crate::bases::Transform;
-        // Apply boundary conditions
-        let nx = self.temp.v.shape()[0];
-        let ny = self.temp.v.shape()[1];
+
         let bases = [chebyshev(nx), cheb_dirichlet_bc(ny)];
         let mut fieldbc = Field2::new(Space2::new(bases));
         let mut bases = [chebyshev(nx), cheb_dirichlet_bc(ny)];
@@ -226,7 +266,7 @@ impl Navier2D {
         fieldbc.backward();
         fieldbc.forward();
         // Set fieldbc
-        self.fieldbc = Some(fieldbc);
+        Some(fieldbc)
     }
 
     fn zero_rhs(&mut self) {
@@ -378,21 +418,43 @@ impl Navier2D {
 
 impl Navier2D {
     /// Returns Nusselt number (heat flux at the plates)
+    /// $$
+    /// Nu = \langle - dTdz \rangle_x (0/H))
+    /// $$
     fn eval_nu(&mut self) -> f64 {
-        //self.temp.backward();
-        self.field.vhat.assign(&self.temp.to_parent());
-        if let Some(field) = &self.fieldbc {
-            self.field.vhat += &field.to_parent();
-        }
-        //self.field.forward();
-        let mut dtdz = -self.field.grad([0, 1], None);
-        dtdz /= self.scale[1] * 0.5;
-        self.field.vhat.assign(&dtdz);
-        self.field.backward();
-        let x_avg = self.field.average_axis(0);
-        (x_avg[x_avg.len() - 1] + x_avg[0]) / 2.
+        use super::functions::eval_nu;
+        eval_nu(&mut self.temp, &mut self.field, &self.fieldbc, &self.scale)
+    }
+
+    /// Returns volumetric Nusselt number
+    /// $$
+    /// Nuvol = \langle uy*T/kappa - dTdz \rangle_V
+    /// $$
+    fn eval_nuvol(&mut self) -> f64 {
+        use super::functions::eval_nuvol;
+        eval_nuvol(
+            &mut self.temp,
+            &mut self.uy,
+            &mut self.field,
+            &self.fieldbc,
+            self.ka,
+            &self.scale,
+        )
+    }
+
+    /// Returns Reynolds number based on kinetic energy
+    fn eval_re(&mut self) -> f64 {
+        use super::functions::eval_re;
+        eval_re(
+            &mut self.ux,
+            &mut self.uy,
+            &mut self.field,
+            self.nu,
+            &self.scale,
+        )
     }
 }
+
 impl Integrate for Navier2D {
     ///         Update Navier Stokes
     fn update(&mut self) {
@@ -454,9 +516,13 @@ impl Integrate for Navier2D {
         let mut time = array![self.time];
         let mut ra = array![self.ra];
         let mut pr = array![self.pr];
+        let mut nu = array![self.nu];
+        let mut ka = array![self.ka];
         write_to_hdf5(&fname, "time", None, Hdf5::Array1(&mut time)).ok();
         write_to_hdf5(&fname, "ra", None, Hdf5::Array1(&mut ra)).ok();
         write_to_hdf5(&fname, "pr", None, Hdf5::Array1(&mut pr)).ok();
+        write_to_hdf5(&fname, "nu", None, Hdf5::Array1(&mut nu)).ok();
+        write_to_hdf5(&fname, "kappa", None, Hdf5::Array1(&mut ka)).ok();
         // Undo addition of bc
         if self.fieldbc.is_some() {
             self.temp.backward();
@@ -467,11 +533,15 @@ impl Integrate for Navier2D {
         // I/O
         let div = self.divergence();
         let nu = self.eval_nu();
+        let nuvol = self.eval_nuvol();
+        let re = self.eval_re();
         println!(
-            "time = {:4.2}      |div| = {:4.2e}     Nu = {:4.2e}",
+            "time = {:4.2}      |div| = {:4.2e}     Nu = {:5.3e}     Nuv = {:5.3e}    Re = {:5.3e}",
             self.time,
             norm_l2(&div),
-            nu
+            nu,
+            nuvol,
+            re,
         );
 
         // diagnostics
@@ -481,6 +551,12 @@ impl Integrate for Navier2D {
         if let Some(d) = self.diagnostics.get_mut("Nu") {
             d.push(nu);
         }
+        if let Some(d) = self.diagnostics.get_mut("Nuvol") {
+            d.push(nuvol);
+        }
+        if let Some(d) = self.diagnostics.get_mut("Re") {
+            d.push(re);
+        }
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .append(true)
@@ -488,7 +564,7 @@ impl Integrate for Navier2D {
             .open("data/info.txt")
             .unwrap();
         //write!(file, "{} {}", time, nu);
-        if let Err(e) = writeln!(file, "{} {}", self.time, nu) {
+        if let Err(e) = writeln!(file, "{} {} {}", self.time, nu, nuvol) {
             eprintln!("Couldn't write to file: {}", e);
         }
     }
@@ -515,21 +591,22 @@ impl Navier2D {
 
     /// Initialize velocity with fourier modes
     ///
-    /// ux = amp \* sin(nx)cos(mx)
-    /// uy = -amp \* cos(nx)sin(mx)
+    /// ux = amp \* sin(mx)cos(nx)
+    /// uy = -amp \* cos(mx)sin(nx)
     pub fn set_velocity(&mut self, amp: f64, m: f64, n: f64) {
-        apply_sin_cos(&mut self.ux, amp, n, m);
-        apply_cos_sin(&mut self.uy, -amp, n, m);
+        apply_sin_cos(&mut self.ux, amp, m, n);
+        apply_cos_sin(&mut self.uy, -amp, m, n);
     }
     /// Initialize temperature with fourier modes
     ///
-    /// temp = amp \* sin(nx)cos(mx)
+    /// temp = -amp \* cos(mx)sin(ny)
     pub fn set_temperature(&mut self, amp: f64, m: f64, n: f64) {
-        apply_sin_cos(&mut self.temp, amp, n, m);
+        apply_cos_sin(&mut self.temp, -amp, m, n);
     }
 }
 
-fn apply_sin_cos(field: &mut Field2, amp: f64, m: f64, n: f64) {
+/// Construct field f(x,y) = amp \* sin(pi\*m)cos(pi\*n)
+pub fn apply_sin_cos(field: &mut Field2, amp: f64, m: f64, n: f64) {
     use std::f64::consts::PI;
     let nx = field.v.shape()[0];
     let ny = field.v.shape()[1];
@@ -547,7 +624,8 @@ fn apply_sin_cos(field: &mut Field2, amp: f64, m: f64, n: f64) {
     field.forward()
 }
 
-fn apply_cos_sin(field: &mut Field2, amp: f64, m: f64, n: f64) {
+/// Construct field f(x,y) = amp \* cos(pi\*m)sin(pi\*n)
+pub fn apply_cos_sin(field: &mut Field2, amp: f64, m: f64, n: f64) {
     use std::f64::consts::PI;
     let nx = field.v.shape()[0];
     let ny = field.v.shape()[1];

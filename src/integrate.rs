@@ -1,9 +1,12 @@
 //! Integrate traits and examples
 pub mod conv_term;
 pub mod diffusion;
+mod functions;
 pub mod navier;
+pub mod navier_adjoint;
 pub use conv_term::conv_term;
 pub use navier::Navier2D;
+pub use navier_adjoint::Navier2DAdjoint;
 
 const MAX_TIMESTEP: usize = 10000000;
 
