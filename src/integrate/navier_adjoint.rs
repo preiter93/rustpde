@@ -202,7 +202,7 @@ impl Navier2DAdjoint {
             time: 0.0,
             dt,
             scale,
-            scale_adjoint: nu,
+            scale_adjoint: 1.0,
             diagnostics,
         };
         navier_adjoint._scale();
