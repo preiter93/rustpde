@@ -535,7 +535,7 @@ impl Integrate for Navier2D {
             .open("data/info.txt")
             .unwrap();
         //write!(file, "{} {}", time, nu);
-        if let Err(e) = writeln!(file, "{} {} {}", self.time, nu, nuvol) {
+        if let Err(e) = writeln!(file, "{} {} {} {}", self.time, nu, nuvol, re) {
             eprintln!("Couldn't write to file: {}", e);
         }
     }

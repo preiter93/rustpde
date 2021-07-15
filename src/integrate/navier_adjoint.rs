@@ -508,7 +508,7 @@ impl Integrate for Navier2DAdjoint {
             .open("data/adjoint_info.txt")
             .unwrap();
         //write!(file, "{} {}", time, nu);
-        if let Err(e) = writeln!(file, "{} {}", self.time, nu) {
+        if let Err(e) = writeln!(file, "{} {} {} {}", self.time, nu, nuvol, re) {
             eprintln!("Couldn't write to file: {}", e);
         }
     }
