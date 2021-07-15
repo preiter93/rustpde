@@ -421,7 +421,7 @@ impl Navier2D {
     /// $$
     /// Nu = \langle - dTdz \rangle_x (0/H))
     /// $$
-    fn eval_nu(&mut self) -> f64 {
+    pub fn eval_nu(&mut self) -> f64 {
         use super::functions::eval_nu;
         eval_nu(&mut self.temp, &mut self.field, &self.fieldbc, &self.scale)
     }
@@ -430,7 +430,7 @@ impl Navier2D {
     /// $$
     /// Nuvol = \langle uy*T/kappa - dTdz \rangle_V
     /// $$
-    fn eval_nuvol(&mut self) -> f64 {
+    pub fn eval_nuvol(&mut self) -> f64 {
         use super::functions::eval_nuvol;
         eval_nuvol(
             &mut self.temp,
@@ -443,7 +443,7 @@ impl Navier2D {
     }
 
     /// Returns Reynolds number based on kinetic energy
-    fn eval_re(&mut self) -> f64 {
+    pub fn eval_re(&mut self) -> f64 {
         use super::functions::eval_re;
         eval_re(
             &mut self.ux,
@@ -499,36 +499,7 @@ impl Integrate for Navier2D {
         use std::io::Write;
         std::fs::create_dir_all("data").unwrap();
         let fname = format!("data/flow{:.*}.h5", 3, self.time);
-        self.temp.backward();
-        self.ux.backward();
-        self.uy.backward();
-        self.pres[0].backward();
-        // Add boundary contribution
-        if let Some(x) = &self.fieldbc {
-            self.temp.v = &self.temp.v + &x.v;
-        }
-        // Field
-        self.temp.write(&fname, Some("temp"));
-        self.ux.write(&fname, Some("ux"));
-        self.uy.write(&fname, Some("uy"));
-        self.pres[0].write(&fname, Some("pres"));
-        // Additional info
-        let mut time = array![self.time];
-        let mut ra = array![self.ra];
-        let mut pr = array![self.pr];
-        let mut nu = array![self.nu];
-        let mut ka = array![self.ka];
-        write_to_hdf5(&fname, "time", None, Hdf5::Array1(&mut time)).ok();
-        write_to_hdf5(&fname, "ra", None, Hdf5::Array1(&mut ra)).ok();
-        write_to_hdf5(&fname, "pr", None, Hdf5::Array1(&mut pr)).ok();
-        write_to_hdf5(&fname, "nu", None, Hdf5::Array1(&mut nu)).ok();
-        write_to_hdf5(&fname, "kappa", None, Hdf5::Array1(&mut ka)).ok();
-        // Undo addition of bc
-        if self.fieldbc.is_some() {
-            self.temp.backward();
-        }
-
-        println!(" ==> {:?}", fname);
+        self.write_to_file(&fname);
 
         // I/O
         let div = self.divergence();
@@ -564,7 +535,7 @@ impl Integrate for Navier2D {
             .open("data/info.txt")
             .unwrap();
         //write!(file, "{} {}", time, nu);
-        if let Err(e) = writeln!(file, "{} {} {} {}", self.time, nu, nuvol, re) {
+        if let Err(e) = writeln!(file, "{} {} {}", self.time, nu, nuvol) {
             eprintln!("Couldn't write to file: {}", e);
         }
     }
@@ -602,6 +573,40 @@ impl Navier2D {
     /// temp = -amp \* cos(mx)sin(ny)
     pub fn set_temperature(&mut self, amp: f64, m: f64, n: f64) {
         apply_cos_sin(&mut self.temp, -amp, m, n);
+    }
+
+    /// Write fields to hdf5 file
+    pub fn write_to_file(&mut self, fname: &str) {
+        self.temp.backward();
+        self.ux.backward();
+        self.uy.backward();
+        self.pres[0].backward();
+        // Add boundary contribution
+        if let Some(x) = &self.fieldbc {
+            self.temp.v = &self.temp.v + &x.v;
+        }
+        // Field
+        self.temp.write(&fname, Some("temp"));
+        self.ux.write(&fname, Some("ux"));
+        self.uy.write(&fname, Some("uy"));
+        self.pres[0].write(&fname, Some("pres"));
+        // Additional info
+        let mut time = array![self.time];
+        let mut ra = array![self.ra];
+        let mut pr = array![self.pr];
+        let mut nu = array![self.nu];
+        let mut ka = array![self.ka];
+        write_to_hdf5(&fname, "time", None, Hdf5::Array1(&mut time)).ok();
+        write_to_hdf5(&fname, "ra", None, Hdf5::Array1(&mut ra)).ok();
+        write_to_hdf5(&fname, "pr", None, Hdf5::Array1(&mut pr)).ok();
+        write_to_hdf5(&fname, "nu", None, Hdf5::Array1(&mut nu)).ok();
+        write_to_hdf5(&fname, "kappa", None, Hdf5::Array1(&mut ka)).ok();
+        // Undo addition of bc
+        if self.fieldbc.is_some() {
+            self.temp.backward();
+        }
+
+        println!(" ==> {:?}", fname);
     }
 }
 
