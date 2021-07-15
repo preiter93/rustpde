@@ -467,36 +467,7 @@ impl Integrate for Navier2DAdjoint {
         use std::io::Write;
         std::fs::create_dir_all("data").unwrap();
         let fname = format!("data/adjoint{:.*}.h5", 3, self.time);
-        self.temp[0].backward();
-        self.ux[0].backward();
-        self.uy[0].backward();
-        self.pres[0].backward();
-        // Add boundary contribution
-        if let Some(x) = &self.fieldbc {
-            self.temp[0].v = &self.temp[0].v + &x.v;
-        }
-        // Field
-        self.temp[0].write(&fname, Some("temp"));
-        self.ux[0].write(&fname, Some("ux"));
-        self.uy[0].write(&fname, Some("uy"));
-        self.pres[0].write(&fname, Some("pres"));
-        // Additional info
-        let mut time = array![self.time];
-        let mut ra = array![self.ra];
-        let mut pr = array![self.pr];
-        let mut nu = array![self.nu];
-        let mut ka = array![self.ka];
-        write_to_hdf5(&fname, "time", None, Hdf5::Array1(&mut time)).ok();
-        write_to_hdf5(&fname, "ra", None, Hdf5::Array1(&mut ra)).ok();
-        write_to_hdf5(&fname, "pr", None, Hdf5::Array1(&mut pr)).ok();
-        write_to_hdf5(&fname, "nu", None, Hdf5::Array1(&mut nu)).ok();
-        write_to_hdf5(&fname, "kappa", None, Hdf5::Array1(&mut ka)).ok();
-        // Undo addition of bc
-        if self.fieldbc.is_some() {
-            self.temp[0].backward();
-        }
-
-        println!(" ==> {:?}", fname);
+        self.write_to_file(&fname);
 
         // I/O
         let div = self.divergence();
@@ -537,7 +508,7 @@ impl Integrate for Navier2DAdjoint {
             .open("data/adjoint_info.txt")
             .unwrap();
         //write!(file, "{} {}", time, nu);
-        if let Err(e) = writeln!(file, "{} {} {} {}", self.time, nu, nuvol, re) {
+        if let Err(e) = writeln!(file, "{} {}", self.time, nu) {
             eprintln!("Couldn't write to file: {}", e);
         }
     }
@@ -552,7 +523,7 @@ impl Navier2DAdjoint {
     /// $$
     /// Nu = \langle - dTdz \rangle_x (0/H))
     /// $$
-    fn eval_nu(&mut self) -> f64 {
+    pub fn eval_nu(&mut self) -> f64 {
         use super::functions::eval_nu;
         eval_nu(
             &mut self.temp[0],
@@ -566,7 +537,7 @@ impl Navier2DAdjoint {
     /// $$
     /// Nuvol = \langle uy*T/kappa - dTdz \rangle_V
     /// $$
-    fn eval_nuvol(&mut self) -> f64 {
+    pub fn eval_nuvol(&mut self) -> f64 {
         use super::functions::eval_nuvol;
         eval_nuvol(
             &mut self.temp[0],
@@ -579,7 +550,7 @@ impl Navier2DAdjoint {
     }
 
     /// Returns Reynolds number based on kinetic energy
-    fn eval_re(&mut self) -> f64 {
+    pub fn eval_re(&mut self) -> f64 {
         use super::functions::eval_re;
         eval_re(
             &mut self.ux[0],
@@ -623,5 +594,39 @@ impl Navier2DAdjoint {
     pub fn reset_time(&mut self) {
         self.time = 0.;
         self.navier.time = 0.;
+    }
+
+    /// Write fields to hdf5 file
+    pub fn write_to_file(&mut self, fname: &str) {
+        self.temp[0].backward();
+        self.ux[0].backward();
+        self.uy[0].backward();
+        self.pres[0].backward();
+        // Add boundary contribution
+        if let Some(x) = &self.fieldbc {
+            self.temp[0].v = &self.temp[0].v + &x.v;
+        }
+        // Field
+        self.temp[0].write(&fname, Some("temp"));
+        self.ux[0].write(&fname, Some("ux"));
+        self.uy[0].write(&fname, Some("uy"));
+        self.pres[0].write(&fname, Some("pres"));
+        // Additional info
+        let mut time = array![self.time];
+        let mut ra = array![self.ra];
+        let mut pr = array![self.pr];
+        let mut nu = array![self.nu];
+        let mut ka = array![self.ka];
+        write_to_hdf5(&fname, "time", None, Hdf5::Array1(&mut time)).ok();
+        write_to_hdf5(&fname, "ra", None, Hdf5::Array1(&mut ra)).ok();
+        write_to_hdf5(&fname, "pr", None, Hdf5::Array1(&mut pr)).ok();
+        write_to_hdf5(&fname, "nu", None, Hdf5::Array1(&mut nu)).ok();
+        write_to_hdf5(&fname, "kappa", None, Hdf5::Array1(&mut ka)).ok();
+        // Undo addition of bc
+        if self.fieldbc.is_some() {
+            self.temp[0].backward();
+        }
+
+        println!(" ==> {:?}", fname);
     }
 }
