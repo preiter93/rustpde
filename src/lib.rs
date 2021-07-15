@@ -1,4 +1,5 @@
 //! # `rustpde`: Spectral method solver for Navier-Stokes equations
+//!<img align="right" src="https://rustacean.net/assets/cuddlyferris.png" width="80">
 //!
 //! # Dependencies
 //! - cargo >= v1.49
