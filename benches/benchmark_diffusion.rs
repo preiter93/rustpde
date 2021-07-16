@@ -1,9 +1,9 @@
 use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
-use ndspectral::cheb_dirichlet;
-use ndspectral::integrate::diffusion::Diffusion2D;
-use ndspectral::Integrate;
-use ndspectral::{Field2, Space2};
+use rustpde::cheb_dirichlet;
+use rustpde::integrate::diffusion::Diffusion2D;
+use rustpde::Integrate;
+use rustpde::{Field2, Space2};
 
 const SIZES: [usize; 4] = [128, 264, 512, 1024];
 

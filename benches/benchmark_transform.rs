@@ -1,6 +1,6 @@
 use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
-use ndspectral::*;
+use rustpde::*;
 
 const SIZES: [usize; 4] = [128, 264, 512, 1024];
 

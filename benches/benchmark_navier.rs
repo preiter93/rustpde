@@ -1,7 +1,7 @@
 use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
-use ndspectral::integrate::navier::Navier2D;
-use ndspectral::Integrate;
+use rustpde::integrate::navier::Navier2D;
+use rustpde::Integrate;
 
 const EVEN: [usize; 3] = [128, 264, 512];
 const ODD: [usize; 3] = [129, 265, 513];
