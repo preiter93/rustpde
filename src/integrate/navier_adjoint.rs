@@ -317,7 +317,8 @@ impl Navier2DAdjoint {
         let conv = self.conv_ux(ux, uy, temp);
         self.rhs += &(self.dt * conv);
         // + diffusion
-        self.rhs += &(self.dt * &self.fields_unsmoothed[0]);
+        let nu = self.nu / self.scale_adjoint;
+        self.rhs += &(self.dt * nu * &self.fields_unsmoothed[0]);
         // update ux
         self.ux[0].from_parent(&self.rhs);
     }
@@ -333,7 +334,8 @@ impl Navier2DAdjoint {
         let conv = self.conv_uy(ux, uy, temp);
         self.rhs += &(self.dt * conv);
         // + diffusion
-        self.rhs += &(self.dt * &self.fields_unsmoothed[1]);
+        let nu = self.nu / self.scale_adjoint;
+        self.rhs += &(self.dt * nu * &self.fields_unsmoothed[1]);
         // update uy
         self.uy[0].from_parent(&self.rhs);
     }
@@ -350,7 +352,8 @@ impl Navier2DAdjoint {
         let buoy = self.uy[1].to_parent();
         self.rhs += &(self.dt * buoy);
         // + diffusion
-        self.rhs += &(self.dt * &self.fields_unsmoothed[2]);
+        let ka = self.ka / self.scale_adjoint;
+        self.rhs += &(self.dt * ka * &self.fields_unsmoothed[2]);
         // update temp
         self.temp[0].from_parent(&self.rhs);
     }
