@@ -47,6 +47,9 @@ use crate::Space2;
 use ndarray::{array, Array2};
 use std::collections::HashMap;
 
+/// Tolerance criteria for residual
+const RES_TOL: f64 = 1e-6;
+
 /// Container for Adjoint Navier-Stokes solver
 pub struct Navier2DAdjoint {
     /// Navier Stokes solver
@@ -89,6 +92,8 @@ pub struct Navier2DAdjoint {
     scale_adjoint: f64,
     /// diagnostics like Nu, ...
     pub diagnostics: HashMap<String, Vec<f64>>,
+    /// residual tolerance (exit if below)
+    res_tol: f64,
 }
 
 impl Navier2DAdjoint {
@@ -202,13 +207,11 @@ impl Navier2DAdjoint {
             time: 0.0,
             dt,
             scale,
-            scale_adjoint: 1.0,
+            scale_adjoint: nu,
             diagnostics,
+            res_tol: RES_TOL,
         };
         navier_adjoint._scale();
-        //navier._rbc();
-        //self.set_temperature(0.2, 1., 1.);
-        //navier.set_velocity(0.2, 1., 1.);
         // Boundary conditions
         navier_adjoint.fieldbc = Navier2D::bc_rbc(nx, ny);
         // Return
@@ -514,6 +517,22 @@ impl Integrate for Navier2DAdjoint {
         if let Err(e) = writeln!(file, "{} {} {} {}", self.time, nu, nuvol, re) {
             eprintln!("Couldn't write to file: {}", e);
         }
+    }
+
+    fn exit(&mut self) -> bool {
+        // Break if divergence is nan
+        let div = self.divergence();
+        if norm_l2(&div).is_nan() {
+            return true;
+        }
+        // Break if residual is small enough
+        let mut res = norm_l2(&self.fields_unsmoothed[0]) / 3.;
+        res += norm_l2(&self.fields_unsmoothed[1]) / 3.;
+        res += norm_l2(&self.fields_unsmoothed[2]) / 3.;
+        if res < self.res_tol {
+            return true;
+        }
+        false
     }
 }
 

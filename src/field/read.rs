@@ -19,12 +19,6 @@ where
             Err(_) => println!("Error while reading file {:?}.", filename),
         }
     }
-
-    // fn read_hdf5(&mut self, filename: &str, group: Option<&str>) -> hdf5::Result<()> {
-    //     read_from_hdf5(filename, "v", group, Hdf5::Array1(&mut self.v))?;
-    //     read_from_hdf5(filename, "vhat", group, Hdf5::Array1(&mut self.vhat))?;
-    //     Ok(())
-    // }
 }
 
 /// 2-D
@@ -68,7 +62,7 @@ fn broadcast_2d<T: std::clone::Clone>(old: &ndarray::Array2<T>, new: &mut ndarra
         .shape()
         .iter()
         .zip(new.shape().iter())
-        .map(|(i, j)| std::cmp::min(i, j).clone())
+        .map(|(i, j)| *std::cmp::min(i, j))
         .collect();
     new.slice_mut(s![..sh[0], ..sh[1]])
         .assign(&old.slice(s![..sh[0], ..sh[1]]));
