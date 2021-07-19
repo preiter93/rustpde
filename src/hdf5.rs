@@ -4,7 +4,7 @@
 //! of ndarray. This is why the data must first be transferred
 //! to arrays from the older ndarray version, before they can be
 //! written (or read).
-use ndarray::{Array0, Array1, Array2};
+use ndarray::{Array, Array0, Array1, Array2, ArrayD, Dimension, IxDyn};
 use std::path::Path;
 
 /// Collection of methods for reading of and writing to hdf5.
@@ -83,7 +83,38 @@ pub fn read_from_hdf5(
     }
     Ok(())
 }
-//
+
+/// Read dataset from hdf5 file
+pub fn read_from_hdf5_2<D: Dimension, const N: usize>(
+    filename: &str,
+    name: &str,
+    group: Option<&str>,
+    //mut array: Hdf5,
+) -> hdf5::Result<Array<f64, D>> {
+    // Open file
+    let file = hdf5::File::open(filename)?;
+
+    //Read dataset
+    let name_path = gen_name_path(name, group);
+    let data = file.dataset(&name_path)?;
+    let y: ndarray_02::ArrayD<f64> = data.read_dyn::<f64>()?;
+    assert!(y.ndim() == N, "Dimension mismatch.");
+
+    // Construct dimension
+    let mut dim = [0; N];
+    for (i, d) in y.shape().iter().zip(dim.iter_mut()) {
+        *d = *i;
+    }
+
+    // Transfer data to new ndarray
+    let mut x = ArrayD::<f64>::zeros(IxDyn(&dim));
+    for (xi, yi) in x.iter_mut().zip(y.iter()) {
+        *xi = *yi
+    }
+    let x = x.into_dimensionality::<D>().unwrap();
+    Ok(x)
+}
+
 /// Write dataset to hdf5 file
 ///
 /// write_to_hdf5(filename, "x", group, Hdf5::Array1(&mut x))?;
