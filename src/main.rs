@@ -22,16 +22,16 @@ use rustpde::Integrate;
 
 fn main() {
     // Parameters
-    let (nx, ny) = (36, 36);
+    let (nx, ny) = (10, 10);
     let ra = 1e4;
     let pr = 1.;
     let adiabatic = true;
     let aspect = 1.0;
     let dt = 0.01;
     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
-    navier.read("restart.h5");
+    //navier.read("restart.h5");
     navier.write();
-    integrate(navier, 52., Some(1.0));
+    integrate(navier, 50., Some(1.0));
 
     // let (nx, ny) = (26, 26);
     // let mut navier_1 = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);

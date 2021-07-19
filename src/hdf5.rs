@@ -39,53 +39,25 @@ impl Hdf5<'_> {
 //                      Read
 ///////////////////////////////////////////////////////////////
 
-/// Read dataset from hdf5 file
-///
-pub fn read_from_hdf5(
+/// Read dataset from hdf5 file into array
+pub fn read_from_hdf5_into<S, D, const N: usize>(
     filename: &str,
     name: &str,
     group: Option<&str>,
-    mut array: Hdf5,
-) -> hdf5::Result<()> {
-    // Open file
-    let file = hdf5::File::open(filename)?;
-
-    //Read dataset
-    let name_path = gen_name_path(name, group);
-    let data = file.dataset(&name_path)?;
-
-    match array {
-        Hdf5::Array0(ref mut x) => {
-            let y: ndarray_02::Array0<f64> =
-                data.read::<f64, ndarray_02::Dim<[ndarray_02::Ix; 0]>>()?;
-            // Transfer to new ndarray
-            for (xi, yi) in x.iter_mut().zip(y.iter()) {
-                *xi = *yi
-            }
-        }
-        //
-        Hdf5::Array1(ref mut x) => {
-            let y: ndarray_02::Array1<f64> =
-                data.read::<f64, ndarray_02::Dim<[ndarray_02::Ix; 1]>>()?;
-            // Transfer to new ndarray
-            for (xi, yi) in x.iter_mut().zip(y.iter()) {
-                *xi = *yi
-            }
-        }
-        Hdf5::Array2(ref mut x) => {
-            let y: ndarray_02::Array2<f64> =
-                data.read::<f64, ndarray_02::Dim<[ndarray_02::Ix; 2]>>()?;
-            // Transfer to new ndarray
-            for (xi, yi) in x.iter_mut().zip(y.iter()) {
-                *xi = *yi
-            }
-        }
+    mut array: ndarray::ArrayBase<S, D>,
+) where
+    S: ndarray::Data<Elem = f64> + ndarray::DataMut,
+    D: ndarray::Dimension,
+{
+    let result = read_from_hdf5::<D, N>(filename, name, group);
+    match result {
+        Ok(x) => array.assign(&x),
+        Err(_) => println!("Error while reading file {:?}.", filename),
     }
-    Ok(())
 }
 
 /// Read dataset from hdf5 file
-pub fn read_from_hdf5_2<D: Dimension, const N: usize>(
+pub fn read_from_hdf5<D: Dimension, const N: usize>(
     filename: &str,
     name: &str,
     group: Option<&str>,
@@ -98,7 +70,12 @@ pub fn read_from_hdf5_2<D: Dimension, const N: usize>(
     let name_path = gen_name_path(name, group);
     let data = file.dataset(&name_path)?;
     let y: ndarray_02::ArrayD<f64> = data.read_dyn::<f64>()?;
-    assert!(y.ndim() == N, "Dimension mismatch.");
+    assert!(
+        y.ndim() == N,
+        "Dimension mismatch, got {:?} expected {:?}.",
+        y.ndim(),
+        N
+    );
 
     // Construct dimension
     let mut dim = [0; N];
