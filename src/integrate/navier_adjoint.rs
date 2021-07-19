@@ -572,8 +572,7 @@ impl Navier2DAdjoint {
         self.uy[0].read(&fname, Some("uy"));
         //self.pres[0].read(&fname, Some("pres"));
         // Additional info
-        let mut time = array![0.];
-        read_from_hdf5(&fname, "time", None, Hdf5::Array1(&mut time)).ok();
+        let time = read_from_hdf5::<ndarray::Ix1, 1>(&fname, "time", None).unwrap();
         self.time = time[0];
         println!(" <== {:?}", fname);
     }
