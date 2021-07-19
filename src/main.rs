@@ -23,7 +23,7 @@ use rustpde::Integrate;
 fn main() {
     // Parameters
     let (nx, ny) = (10, 10);
-    let ra = 1e4;
+    let ra = 1e03;
     let pr = 1.;
     let adiabatic = true;
     let aspect = 1.0;

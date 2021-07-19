@@ -20,6 +20,8 @@ pub trait Integrate {
     fn get_dt(&self) -> f64;
     /// Write results (can be used as callback)
     fn write(&mut self);
+    /// Additional break criteria
+    fn exit(&mut self) -> bool;
 }
 
 /// Integrade pde, that implements the Integrate trait.
@@ -54,6 +56,10 @@ pub fn integrate<T: Integrate>(mut pde: T, max_time: f64, save_intervall: Option
         }
         if timestep >= MAX_TIMESTEP {
             println!("timestep limit reached: {:?}", timestep);
+            break;
+        }
+        if pde.exit() {
+            println!("break criteria triggered");
             break;
         }
     }

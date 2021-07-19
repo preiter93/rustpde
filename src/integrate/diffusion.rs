@@ -90,6 +90,10 @@ impl Integrate for Diffusion1D {
         self.field.backward();
         self.field.write(&fname, None);
     }
+
+    fn exit(&mut self) -> bool {
+        false
+    }
 }
 
 /// Solve 2-dimensional diffusion equation.
@@ -208,5 +212,9 @@ impl Integrate for Diffusion2D {
         if self.fieldbc.is_some() {
             self.field.backward();
         }
+    }
+
+    fn exit(&mut self) -> bool {
+        false
     }
 }

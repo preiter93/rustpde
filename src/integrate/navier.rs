@@ -539,6 +539,15 @@ impl Integrate for Navier2D {
             eprintln!("Couldn't write to file: {}", e);
         }
     }
+
+    fn exit(&mut self) -> bool {
+        // Break if divergence is nan
+        let div = self.divergence();
+        if norm_l2(&div).is_nan() {
+            return true;
+        }
+        false
+    }
 }
 
 fn norm_l2(array: &Array2<f64>) -> f64 {
