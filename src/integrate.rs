@@ -31,7 +31,7 @@ pub trait Integrate {
 /// Stop Criteria:
 /// 1. Timestep limit
 /// 2. Time limit
-pub fn integrate<T: Integrate>(mut pde: T, max_time: f64, save_intervall: Option<f64>) {
+pub fn integrate<T: Integrate>(pde: &mut T, max_time: f64, save_intervall: Option<f64>) {
     let mut timestep: usize = 0;
     let eps_dt = pde.get_dt() * 1e-4;
     loop {
