@@ -7,7 +7,7 @@ from utils.plot_utils import plot_streamplot
 
 # -- Get list of files
 fname, time = [], []
-for file in glob.glob("data/*.h5"):
+for file in [*glob.glob("*.h5"), *glob.glob("data/*.h5")]:
     try:
         time.append(float(re.findall("\d+\.\d+", file)[0]))
         fname.append(file)
