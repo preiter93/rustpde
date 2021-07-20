@@ -19,13 +19,13 @@ idx = np.argsort(time)
 fname = np.array(fname)[idx]
 time = np.array(time)[idx]
 
-for i,f in enumerate(fname):
-    print("# {:3d}: {:}".format(i,f))
-print('From number:')
+for i, f in enumerate(fname):
+    print("# {:3d}: {:}".format(i, f))
+print("From number:")
 i0 = int(input())
-print('To number:')
+print("To number:")
 i9 = int(input())
-print('Step:')
+print("Step:")
 step = int(input())
 
 # -- Read hd5 file

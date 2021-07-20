@@ -24,24 +24,24 @@ idx = np.argsort(time)
 fname = np.array(fname)[idx]
 time = np.array(time)[idx]
 
-for i,f in enumerate(fname):
-    print("# {:3d}: {:}".format(i,f))
-print('From number:')
+for i, f in enumerate(fname):
+    print("# {:3d}: {:}".format(i, f))
+print("From number:")
 i0 = int(input())
-print('To number:')
+print("To number:")
 i9 = int(input())
-print('Step:')
+print("Step:")
 step = int(input())
 
-for i,f in enumerate(fname[i0:i9:step]):
-# -- Read hd5 file
+for i, f in enumerate(fname[i0:i9:step]):
+    # -- Read hd5 file
     filename = f
     figname = f.replace(".h5", ".png")
-    
+
     if os.path.isfile(figname):
         print("{} already exists".format(figname))
         continue
-        
+
     with h5py.File(filename, "r") as f:
         t = np.array(f["temp/v"])
         u = np.array(f["ux/v"])
@@ -50,7 +50,7 @@ for i,f in enumerate(fname[i0:i9:step]):
         y = np.array(f["y"])
 
     print("Plot {:}".format(filename))
-    fig, ax = plot_quiver(x,y,t,u,v,return_fig=True)
+    fig, ax = plot_quiver(x, y, t, u, v, return_fig=True)
     fig.savefig(figname)
     plt.close("all")
 
@@ -66,22 +66,27 @@ idx = np.argsort(time)
 files = list(np.array(fname)[idx])
 time = np.array(time)[idx]
 
-for i,f in enumerate(files):
-    print("# {:3d}: {:}".format(i,f))
+for i, f in enumerate(files):
+    print("# {:3d}: {:}".format(i, f))
 
 if settings["duration"] is None:
-    print('How long should the movie be? (seconds)')
+    print("How long should the movie be? (seconds)")
     settings["duration"] = float(input())
 
 n_frames = len(files)
-fps = n_frames/settings["duration"]
+fps = n_frames / settings["duration"]
 
 # Execute FFmpeg sub-process, with stdin pipe as input, and jpeg_pipe input format
-process = ffmpeg.input('pipe:', r=fps, f='png_pipe').output(settings["filename"], vcodec='libx264').overwrite_output().run_async(pipe_stdin=True)
+process = (
+    ffmpeg.input("pipe:", r=fps, f="png_pipe")
+    .output(settings["filename"], vcodec="libx264")
+    .overwrite_output()
+    .run_async(pipe_stdin=True)
+)
 
 # Iterate jpeg_files, read the content of each file and write it to stdin
 for in_file in files:
-    with open(in_file, 'rb') as f:
+    with open(in_file, "rb") as f:
         # Read the JPEG file content to jpeg_data (bytes array)
         data = f.read()
 
@@ -91,5 +96,3 @@ for in_file in files:
 # Close stdin pipe - FFmpeg fininsh encoding the output file.
 process.stdin.close()
 process.wait()
-
-
