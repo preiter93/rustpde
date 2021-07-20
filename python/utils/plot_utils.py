@@ -13,7 +13,7 @@ def plot_quiver(x, y, t, u, v, skip=None, return_fig=False):
 
     fig, ax = plt.subplots()
     ax.contourf(
-        xx, yy, t, levels=np.linspace(t.min(), t.max(), 40), cmap=SETTINGS["cmap"]
+        xx, yy, t, levels=np.linspace(t.min(), t.max(), 101), cmap=SETTINGS["cmap"]
     )
     ax.set_aspect(1)
     ax.set_xticks([])
@@ -21,7 +21,7 @@ def plot_quiver(x, y, t, u, v, skip=None, return_fig=False):
     ax.set_xlim(x.min(), x.max())
     ax.set_ylim(y.min(), y.max())
 
-    speed = np.max(np.sqrt(u ** 2 + v ** 2))
+    speed = 2.*np.max(np.sqrt(u ** 2 + v ** 2))
     if skip is None:
         skip = t.shape[0] // 16
     ax.quiver(
@@ -30,7 +30,7 @@ def plot_quiver(x, y, t, u, v, skip=None, return_fig=False):
         u[::skip, ::skip] / speed,
         v[::skip, ::skip] / speed,
         scale=7.9,
-        width=0.007,
+        width=0.005,
         alpha=0.5,
         headwidth=4,
     )
