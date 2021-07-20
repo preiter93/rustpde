@@ -17,9 +17,9 @@ idx = np.argsort(time)
 fname = np.array(fname)[idx]
 time = np.array(time)[idx]
 
-for i,f in enumerate(fname):
-    print("# {:3d}: {:}".format(i,f))
-print('Enter number:')
+for i, f in enumerate(fname):
+    print("# {:3d}: {:}".format(i, f))
+print("Enter number:")
 i = int(input())
 
 # -- Read hd5 file
@@ -32,5 +32,5 @@ with h5py.File(filename, "r") as f:
     y = np.array(f["y"])
 
 print("Plot {:}".format(filename))
-fig, ax = plot_streamplot(x,y,t,u,v,return_fig=True)
+fig, ax = plot_streamplot(x, y, t, u, v, return_fig=True)
 plt.show()
