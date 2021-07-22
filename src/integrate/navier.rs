@@ -616,6 +616,11 @@ impl Navier2D {
 
         println!(" ==> {:?}", fname);
     }
+
+    /// Reset time
+    pub fn reset_time(&mut self) {
+        self.time = 0.;
+    }
 }
 
 /// Construct field f(x,y) = amp \* sin(pi\*m)cos(pi\*n)
