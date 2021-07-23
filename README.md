@@ -79,7 +79,7 @@ by the script
 
 `./bin/create_xmf`.
 
-This script works only for fields from the `Navier2D'
+This script works only for fields from the `Navier2D`
 solver with the attributes temp, ux, uy and pres.
 The bin folder contains also the full crate `create_xmf`, which
 can be adapted for specific usecases.
