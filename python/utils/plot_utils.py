@@ -56,7 +56,7 @@ def plot_streamplot(x, y, t, u, v, return_fig=False):
     ax.set_xlim(x.min(), x.max())
     ax.set_ylim(y.min(), y.max())
 
-    nx, ny = 41*int(x.size/y.size), 41
+    nx, ny = int(41*x.size/y.size), 41
     xi = np.linspace(x.min(), x.max(), nx)
     yi = np.linspace(y.min(), y.max(), ny)
 
