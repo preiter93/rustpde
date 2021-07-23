@@ -213,7 +213,7 @@ impl Navier2DAdjoint {
         };
         navier_adjoint._scale();
         // Boundary condition
-        navier_adjoint.set_temp_bc(Navier2D::bc_rbc(nx, ny));
+        navier_adjoint.set_temp_bc(Navier2D::bc_rbc(nx, ny), Navier2D::bc_rbc(nx, ny));
         // Return
         navier_adjoint
     }
@@ -239,8 +239,11 @@ impl Navier2DAdjoint {
     }
 
     /// Set boundary condition field for temperature
-    pub fn set_temp_bc(&mut self, fieldbc: Field2) {
-        self.fieldbc = Some(fieldbc);
+    /// Both fields should be the same, necessary beceause
+    /// fields do not implement the copy trait yet
+    pub fn set_temp_bc(&mut self, fieldbc1: Field2, fieldbc2: Field2) {
+        self.fieldbc = Some(fieldbc1);
+        self.navier.fieldbc = Some(fieldbc2);
     }
 
     /// Reset rhs array

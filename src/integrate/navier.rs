@@ -263,14 +263,18 @@ impl Navier2D {
     /// condition with smooth transfer function
     /// to T = 0.5 at the bottom and T = -0.5
     /// at the top
-    pub fn bc_zero(nx: usize, ny: usize) -> Field2 {
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - Transition parameter (larger means smoother)
+    pub fn bc_zero(nx: usize, ny: usize, k: f64) -> Field2 {
         use crate::bases::Transform;
         // Create base and field
         let mut bases = [cheb_dirichlet_bc(nx), chebyshev(ny)];
         let mut fieldbc = Field2::new(Space2::new([cheb_dirichlet_bc(nx), chebyshev(ny)]));
         let mut bc = fieldbc.vhat.to_owned();
         // Sidewall temp function
-        let transfer = transfer_function(&fieldbc.x[1], 0.5, 0., -0.5, 0.02);
+        let transfer = transfer_function(&fieldbc.x[1], 0.5, 0., -0.5, k);
         // Set boundary condition along axis
         bc.slice_mut(s![0, ..]).assign(&transfer);
         bc.slice_mut(s![1, ..]).assign(&transfer);
