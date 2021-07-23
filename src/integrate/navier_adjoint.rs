@@ -212,8 +212,8 @@ impl Navier2DAdjoint {
             res_tol: RES_TOL,
         };
         navier_adjoint._scale();
-        // Boundary conditions
-        navier_adjoint.fieldbc = Navier2D::bc_rbc(nx, ny);
+        // Boundary condition
+        navier_adjoint.set_temp_bc(Navier2D::bc_rbc(nx, ny));
         // Return
         navier_adjoint
     }
@@ -236,6 +236,11 @@ impl Navier2DAdjoint {
             field.x[0] *= self.scale[0];
             field.x[1] *= self.scale[1];
         }
+    }
+
+    /// Set boundary condition field for temperature
+    pub fn set_temp_bc(&mut self, fieldbc: Field2) {
+        self.fieldbc = Some(fieldbc);
     }
 
     /// Reset rhs array
