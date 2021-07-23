@@ -79,7 +79,8 @@
 //!
 //! This script works only for fields stemming from the `Navier2D'
 //! solver with the attributes temp, ux, uy and pres.
-//! Upon request, the full create_xmf create can be provided.
+//! The bin folder contains also the create create_xmf, which
+//! can be adapted for specific usecases.
 //!
 //! ## Documentation
 //!
