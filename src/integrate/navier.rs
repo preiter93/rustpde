@@ -34,7 +34,7 @@ use crate::hdf5::{read_from_hdf5, write_to_hdf5, Hdf5};
 use crate::solver::{Hholtz, Poisson, Solve, SolverField};
 use crate::Field2;
 use crate::Space2;
-use ndarray::{array, s, Array2, Zip};
+use ndarray::{array, s, Array1, Array2};
 use std::collections::HashMap;
 
 /// Return viscosity from Ra, Pr, and height of the cell
@@ -212,9 +212,9 @@ impl Navier2D {
             diagnostics,
         };
         navier._scale();
-        //navier._rbc();
-        navier.fieldbc = Self::bc_rbc(nx, ny);
-        //self.set_temperature(0.2, 1., 1.);
+        // Boundary condition
+        navier.set_temp_bc(Self::bc_rbc(nx, ny));
+        // Initial condition
         navier.set_velocity(0.2, 1., 1.);
         // Return
         navier
@@ -241,35 +241,50 @@ impl Navier2D {
     ///
     /// T = 0.5 at the bottom and T = -0.5
     /// at the top
-    pub fn bc_rbc(nx: usize, ny: usize) -> Option<Field2> {
-        //use crate::space::Spaced;
-        //use crate::bases::Chebyshev;
+    pub fn bc_rbc(nx: usize, ny: usize) -> Field2 {
         use crate::bases::Transform;
-
-        let bases = [chebyshev(nx), cheb_dirichlet_bc(ny)];
-        let mut fieldbc = Field2::new(Space2::new(bases));
+        // Create base and field
         let mut bases = [chebyshev(nx), cheb_dirichlet_bc(ny)];
-
+        let mut fieldbc = Field2::new(Space2::new([chebyshev(nx), cheb_dirichlet_bc(ny)]));
         let mut bc = fieldbc.vhat.to_owned();
-        // bottom
-        Zip::from(&mut bc.slice_mut(s![.., 0]))
-            .and(&fieldbc.x[0])
-            .for_each(|b, &_| {
-                *b = 0.5; //(PI*x).cos();
-            });
-        // top
-        Zip::from(&mut bc.slice_mut(s![.., 1]))
-            .and(&fieldbc.x[0])
-            .for_each(|b, &_| {
-                *b = -0.5;
-            });
 
-        //let mut base = Chebyshev::new(nx);
+        // Set boundary condition along axis
+        bc.slice_mut(s![.., 0]).fill(0.5);
+        bc.slice_mut(s![.., 1]).fill(-0.5);
+
+        // Transform
         bases[0].forward_inplace(&mut bc, &mut fieldbc.vhat, 0);
         fieldbc.backward();
         fieldbc.forward();
-        // Set fieldbc
-        Some(fieldbc)
+        fieldbc
+    }
+
+    /// Return field for zero sidewall boundary
+    /// condition with smooth transfer function
+    /// to T = 0.5 at the bottom and T = -0.5
+    /// at the top
+    pub fn bc_zero(nx: usize, ny: usize) -> Field2 {
+        use crate::bases::Transform;
+        // Create base and field
+        let mut bases = [cheb_dirichlet_bc(nx), chebyshev(ny)];
+        let mut fieldbc = Field2::new(Space2::new([cheb_dirichlet_bc(nx), chebyshev(ny)]));
+        let mut bc = fieldbc.vhat.to_owned();
+        // Sidewall temp function
+        let transfer = transfer_function(&fieldbc.x[1], 0.5, 0., -0.5, 0.02);
+        // Set boundary condition along axis
+        bc.slice_mut(s![0, ..]).assign(&transfer);
+        bc.slice_mut(s![1, ..]).assign(&transfer);
+
+        // Transform
+        bases[1].forward_inplace(&mut bc, &mut fieldbc.vhat, 1);
+        fieldbc.backward();
+        fieldbc.forward();
+        fieldbc
+    }
+
+    /// Set boundary condition field for temperature
+    pub fn set_temp_bc(&mut self, fieldbc: Field2) {
+        self.fieldbc = Some(fieldbc);
     }
 
     fn zero_rhs(&mut self) {
@@ -664,4 +679,19 @@ pub fn apply_cos_sin(field: &mut Field2, amp: f64, m: f64, n: f64) {
         }
     }
     field.forward()
+}
+
+/// Transfer function for zero sidewall boundary condition
+fn transfer_function(x: &Array1<f64>, v_l: f64, v_m: f64, v_r: f64, k: f64) -> Array1<f64> {
+    let mut result = Array1::zeros(x.raw_dim());
+    let length = x[x.len() - 1] - x[0];
+    for (i, xi) in x.iter().enumerate() {
+        let xs = xi * 2. / length;
+        if xs < 0. {
+            result[i] = -1.0 * k * xs / (k + xs + 1.) * (v_l - v_m) + v_m;
+        } else {
+            result[i] = 1.0 * k * xs / (k - xs + 1.) * (v_r - v_m) + v_m;
+        }
+    }
+    result
 }
