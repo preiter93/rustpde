@@ -70,6 +70,17 @@
 //! Provided python has all librarys installed, you should now
 //! see an animation.
 //!
+//! ### Paraview
+//!
+//! The xmf files, corresponding to the h5 files can be created
+//! by the script
+//!
+//! `./bin/create_xmf`.
+//!
+//! This script works only for fields stemming from the `Navier2D'
+//! solver with the attributes temp, ux, uy and pres.
+//! Upon request, the full create_xmf create can be provided.
+//!
 //! ## Documentation
 //!
 //! Download and run:

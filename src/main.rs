@@ -31,7 +31,7 @@ fn main() {
     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
     //navier.read("restart.h5");
     navier.write();
-    integrate(navier, 50., Some(1.0));
+    integrate(&mut navier, 50., Some(1.0));
 
     // let (nx, ny) = (26, 26);
     // let mut navier_1 = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);

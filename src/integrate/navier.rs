@@ -164,6 +164,7 @@ impl Navier2D {
             Field2::new(Space2::new([chebyshev(nx), chebyshev(ny)])),
             Field2::new(Space2::new([cheb_neumann(nx), cheb_neumann(ny)])),
         ];
+
         // define solver
         let solver_ux = SolverField::Hholtz(Hholtz::from_field(
             &ux,
@@ -183,12 +184,14 @@ impl Navier2D {
         ));
         let solver = [solver_ux, solver_uy, solver_temp, solver_pres];
         let rhs = Array2::zeros(temp.v.raw_dim());
+
         // Diagnostics
         let mut diagnostics = HashMap::new();
         diagnostics.insert("time".to_string(), Vec::<f64>::new());
         diagnostics.insert("Nu".to_string(), Vec::<f64>::new());
         diagnostics.insert("Nuvol".to_string(), Vec::<f64>::new());
         diagnostics.insert("Re".to_string(), Vec::<f64>::new());
+
         // Initialize
         let mut navier = Navier2D {
             field,
@@ -497,6 +500,8 @@ impl Integrate for Navier2D {
 
     fn write(&mut self) {
         use std::io::Write;
+
+        // Write hdf5 file
         std::fs::create_dir_all("data").unwrap();
         let fname = format!("data/flow{:.*}.h5", 3, self.time);
         self.write_to_file(&fname);
