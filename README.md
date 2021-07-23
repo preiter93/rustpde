@@ -50,7 +50,7 @@ fn main() {
     // navier.read("data/flow100.000.h5");
     // Write first field
     navier.write();
-    integrate(navier, 100., Some(1.0));
+    integrate(&mut navier, 100., Some(1.0));
 }
 ```
 
