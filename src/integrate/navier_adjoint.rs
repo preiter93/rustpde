@@ -26,7 +26,7 @@
 //!     // navier_adjoint.read("data/flow100.000.h5");
 //!     // Write first field
 //!     navier_adjoint.write();
-//!     integrate(navier_adjoint, 100., Some(1.0));
+//!     integrate(&mut navier_adjoint, 100., Some(1.0));
 //! }
 //! ```
 //!
