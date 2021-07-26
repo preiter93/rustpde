@@ -2,8 +2,8 @@
 use ndarray::LinalgScalar;
 use ndarray::{Array1, Array2};
 
-use ndarray_02::Array1 as Array1_old;
-use ndarray_02::Array2 as Array2_old;
+// use ndarray_02::Array1 as Array1_old;
+// use ndarray_02::Array2 as Array2_old;
 use std::cmp::Ordering;
 use std::convert::TryInto;
 
@@ -63,13 +63,13 @@ pub fn eig(a: &Array2<f64>) -> (Array1<f64>, Array2<f64>, Array2<f64>) {
 
     // use old ndarray version, which supports linalg
     let (n, m) = (a.shape()[0], a.shape()[1]);
-    let mut m = Array2_old::<f64>::zeros((n, m));
+    let mut m = Array2::<f64>::zeros((n, m));
     for (oldv, newv) in m.iter_mut().zip(a.iter()) {
         *oldv = *newv;
     }
     let (eval_c, evec_c) = m.eig().unwrap();
-    let eval_c = ndarray_vec_to_new(&eval_c);
-    let evec_c = ndarray_to_new(&evec_c);
+    // let eval_c = ndarray_vec_to_new(&eval_c);
+    // let evec_c = ndarray_to_new(&evec_c);
     // Convert complex -> f64
     let mut eval = Array1::zeros(eval_c.raw_dim());
     let mut evec = Array2::zeros(evec_c.raw_dim());
@@ -94,38 +94,39 @@ pub fn eig(a: &Array2<f64>) -> (Array1<f64>, Array2<f64>, Array2<f64>) {
 /// Return inverse of square matrix
 pub fn inv(a: &Array2<f64>) -> Array2<f64> {
     use ndarray_linalg::*;
-    let inverse: Array2_old<f64> = ndarray_to_old(a).inv().unwrap();
-    ndarray_to_new(&inverse)
+    a.inv().unwrap()
+    //let inverse: Array2_old<f64> = ndarray_to_old(a).inv().unwrap();
+    //ndarray_to_new(&inverse)
 }
 
-// Convert 2d to old ndarray
-fn ndarray_to_old<T: LinalgScalar>(new: &Array2<T>) -> Array2_old<T> {
-    let (n, m) = (new.shape()[0], new.shape()[1]);
-    let mut old = Array2_old::<T>::zeros((n, m));
-    for (oldv, newv) in old.iter_mut().zip(new.iter()) {
-        *oldv = *newv;
-    }
-    old
-}
+// // Convert 2d to old ndarray
+// fn ndarray_to_old<T: LinalgScalar>(new: &Array2<T>) -> Array2_old<T> {
+//     let (n, m) = (new.shape()[0], new.shape()[1]);
+//     let mut old = Array2_old::<T>::zeros((n, m));
+//     for (oldv, newv) in old.iter_mut().zip(new.iter()) {
+//         *oldv = *newv;
+//     }
+//     old
+// }
 
-// Convert 2d from old ndarray
-fn ndarray_to_new<T: LinalgScalar>(old: &Array2_old<T>) -> Array2<T> {
-    let (n, m) = (old.shape()[0], old.shape()[1]);
-    let mut new = Array2::<T>::zeros((n, m));
-    for (newv, oldv) in new.iter_mut().zip(old.iter()) {
-        *newv = *oldv;
-    }
-    new
-}
+// // Convert 2d from old ndarray
+// fn ndarray_to_new<T: LinalgScalar>(old: &Array2_old<T>) -> Array2<T> {
+//     let (n, m) = (old.shape()[0], old.shape()[1]);
+//     let mut new = Array2::<T>::zeros((n, m));
+//     for (newv, oldv) in new.iter_mut().zip(old.iter()) {
+//         *newv = *oldv;
+//     }
+//     new
+// }
 
-// Convert 1d from old ndarray
-fn ndarray_vec_to_new<T: LinalgScalar>(old: &Array1_old<T>) -> Array1<T> {
-    let mut new = Array1::<T>::zeros(old.len());
-    for (newv, oldv) in new.iter_mut().zip(old.iter()) {
-        *newv = *oldv;
-    }
-    new
-}
+// // Convert 1d from old ndarray
+// fn ndarray_vec_to_new<T: LinalgScalar>(old: &Array1_old<T>) -> Array1<T> {
+//     let mut new = Array1::<T>::zeros(old.len());
+//     for (newv, oldv) in new.iter_mut().zip(old.iter()) {
+//         *newv = *oldv;
+//     }
+//     new
+// }
 
 /// Argsort Vector ( smallest -> largest ).
 /// Returns permutation vector.

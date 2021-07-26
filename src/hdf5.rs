@@ -4,7 +4,7 @@
 //! of ndarray. This is why the data must first be transferred
 //! to arrays from the older ndarray version, before they can be
 //! written (or read).
-use ndarray::{Array, Array0, Array1, Array2, ArrayD, Dimension, IxDyn};
+use ndarray::{Array, Array0, Array1, Array2, ArrayD, Dimension};
 use std::path::Path;
 
 /// Collection of methods for reading of and writing to hdf5.
@@ -14,7 +14,6 @@ use std::path::Path;
 /// - Array0 (Scalar),
 /// - Array1,
 /// - Array2,
-
 pub enum Hdf5<'a> {
     /// Read/Write Scalar
     Array0(&'a mut Array0<f64>),
@@ -69,7 +68,7 @@ pub fn read_from_hdf5<D: Dimension, const N: usize>(
     //Read dataset
     let name_path = gen_name_path(name, group);
     let data = file.dataset(&name_path)?;
-    let y: ndarray_02::ArrayD<f64> = data.read_dyn::<f64>()?;
+    let y: ArrayD<f64> = data.read_dyn::<f64>()?;
     assert!(
         y.ndim() == N,
         "Dimension mismatch, got {:?} expected {:?}.",
@@ -83,12 +82,8 @@ pub fn read_from_hdf5<D: Dimension, const N: usize>(
         *d = *i;
     }
 
-    // Transfer data to new ndarray
-    let mut x = ArrayD::<f64>::zeros(IxDyn(&dim));
-    for (xi, yi) in x.iter_mut().zip(y.iter()) {
-        *xi = *yi
-    }
-    let x = x.into_dimensionality::<D>().unwrap();
+    // Dyn to static
+    let x = y.into_dimensionality::<D>().unwrap();
     Ok(x)
 }
 
@@ -116,30 +111,19 @@ pub fn write_to_hdf5(
         file.dataset(&name_path)?
     } else {
         file.new_dataset::<f64>()
-            .create(&name_path, array.shape())?
+            .no_chunk()
+            .shape(array.shape())
+            .create(&name_path[..])?
     };
     match array {
         Hdf5::Array0(x) => {
-            let mut data = ndarray_02::Array0::<f64>::zeros(());
-            for (xi, yi) in data.iter_mut().zip(x.iter()) {
-                *xi = *yi
-            }
-            dset.write(&data)?;
+            dset.write(&x.view())?;
         }
         Hdf5::Array1(x) => {
-            let mut data = ndarray_02::Array1::<f64>::zeros(x.len());
-            for (xi, yi) in data.iter_mut().zip(x.iter()) {
-                *xi = *yi
-            }
-            dset.write(&data)?;
+            dset.write(&x.view())?;
         }
         Hdf5::Array2(x) => {
-            let (n, m) = (x.shape()[0], x.shape()[1]);
-            let mut data = ndarray_02::Array2::<f64>::zeros((n, m));
-            for (xi, yi) in data.iter_mut().zip(x.iter()) {
-                *xi = *yi
-            }
-            dset.write(&data)?;
+            dset.write(&x.view())?;
         }
     }
 
