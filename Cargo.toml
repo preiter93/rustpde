@@ -6,13 +6,11 @@ edition = "2018"
 description = "N-dimensional spectral transforms of various basis functions"
 
 [dependencies]
-ndarray = { version = "0.15.0", features = ["rayon"] }
-# newest ndarray version not compatible with -linalg
-ndarray-02 = { package = "ndarray", version ="0.14" }
-ndarray-linalg = { version = "0.13", features = ["openblas-static"] }
+ndarray = { version = "0.15", features = ["rayon"] }
+ndarray-linalg = { version = "0.14", features = ["openblas-static"] }
 enum_dispatch = "0.3.7"
 num-traits = "0.2.12"
-hdf5 = "0.7.1"
+hdf5 = {path = "hdf5-rust", version = "0.7.1"}
 #funspace = "0.1.0"
 funspace = {path = "funspace", version = "0.1.0"}
 
