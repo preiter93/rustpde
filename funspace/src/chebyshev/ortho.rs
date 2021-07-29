@@ -6,10 +6,12 @@ use crate::LaplacianInverse;
 use crate::Mass;
 use crate::Size;
 use crate::Transform;
+use crate::TransformPar;
 use ndarray::prelude::*;
 use ndrustfft::DctHandler;
 
 /// # Container for chebyshev space
+#[derive(Clone)]
 pub struct Chebyshev<A> {
     /// Number of coefficients in physical space
     pub n: usize,
@@ -21,8 +23,8 @@ pub struct Chebyshev<A> {
     dct_handler: DctHandler<A>,
     /// Only for internal use, defines how to correct dct to obtain
     /// chebyshev transform
-    correct_dct_fwd: Array1<A>,
-    correct_dct_bwd: Array1<A>,
+    correct_dct_forward: Array1<A>,
+    correct_dct_backward: Array1<A>,
 }
 
 impl<A: FloatNum> Chebyshev<A> {
@@ -31,25 +33,30 @@ impl<A: FloatNum> Chebyshev<A> {
     /// # Arguments
     /// * `n` - Length of array's dimension which shall live in chebyshev space.
     ///
+    /// # Panics
+    /// Panics when input type cannot be cast from f64.
+    ///
     /// # Examples
     /// ```
     /// use funspace::chebyshev::Chebyshev;
     /// let cheby = Chebyshev::<f64>::new(10);
     /// ```
+    #[must_use]
     pub fn new(n: usize) -> Self {
         let mut correct_dct = Array1::<A>::zeros(n);
         for (i, s) in correct_dct.iter_mut().enumerate() {
             *s = A::from_f64((-1.0_f64).powf(i as f64)).unwrap();
         }
-        let correct_dct_fwd = correct_dct.mapv(|x| x * A::from_f64(1. / (n - 1) as f64).unwrap());
-        let correct_dct_bwd = correct_dct.mapv(|x| x / A::from_f64(2.0).unwrap());
+        let correct_dct_forward =
+            correct_dct.mapv(|x| x * A::from_f64(1. / (n - 1) as f64).unwrap());
+        let correct_dct_backward = correct_dct.mapv(|x| x / A::from_f64(2.0).unwrap());
         Self {
             n,
             m: n,
             x: Self::_nodes_2nd_kind(n),
             dct_handler: DctHandler::new(n),
-            correct_dct_fwd,
-            correct_dct_bwd,
+            correct_dct_forward,
+            correct_dct_backward,
         }
     }
 
@@ -70,6 +77,9 @@ impl<A: FloatNum> Chebyshev<A> {
     ///
     /// Differentiation is performed on input array directly.
     ///
+    /// # Panics
+    /// Panics when input type cannot be cast from f64.
+    ///
     /// # Example
     /// Differentiate along lane
     /// ```
@@ -86,6 +96,7 @@ impl<A: FloatNum> Chebyshev<A> {
     /// cheby.differentiate_lane(&mut input, 0);
     /// approx_eq(&input, &array![1., 2., 3., 4.]);
     /// ```
+    #[allow(clippy::used_underscore_binding)]
     pub fn differentiate_lane<T, S>(&self, data: &mut ArrayBase<S, Ix1>, n_times: usize)
     where
         T: FloatNum,
@@ -210,6 +221,7 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
     }
 
     /// See [`Chebyshev::forward`]
+    #[allow(clippy::used_underscore_binding)]
     fn forward_inplace<S1, S2, D>(
         &mut self,
         input: &mut ArrayBase<S1, D>,
@@ -221,7 +233,7 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
         D: Dimension + ndarray::RemoveAxis,
     {
         use crate::utils::check_array_axis;
-        use ndrustfft::nddct1_par as nddct1;
+        use ndrustfft::nddct1;
         check_array_axis(input, self.n, axis, Some("chebyshev forward"));
         check_array_axis(output, self.m, axis, Some("chebyshev forward"));
         // Cosine transform (DCT)
@@ -229,7 +241,7 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
         // Correct DCT
         let _05 = A::from_f64(1. / 2.).unwrap();
         for mut v in output.lanes_mut(Axis(axis)) {
-            v *= &self.correct_dct_fwd;
+            v *= &self.correct_dct_forward;
             v[0] *= _05;
             v[self.n - 1] *= _05;
         }
@@ -263,6 +275,10 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
     }
 
     /// See [`Chebyshev::backward`]
+    ///
+    /// # Panics
+    /// Panics when input type cannot be cast from f64.
+    #[allow(clippy::used_underscore_binding)]
     fn backward_inplace<S1, S2, D>(
         &mut self,
         input: &mut ArrayBase<S1, D>,
@@ -274,19 +290,136 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
         D: Dimension + ndarray::RemoveAxis,
     {
         use crate::utils::check_array_axis;
-        use ndrustfft::nddct1_par as nddct1;
+        use ndrustfft::nddct1;
         check_array_axis(input, self.m, axis, Some("chebyshev backward"));
         check_array_axis(output, self.n, axis, Some("chebyshev backward"));
         // Correct
         let mut buffer = input.to_owned();
         let _2 = A::from_f64(2.).unwrap();
         for mut v in buffer.lanes_mut(Axis(axis)) {
-            v *= &self.correct_dct_bwd;
+            v *= &self.correct_dct_backward;
             v[0] *= _2;
             v[self.n - 1] *= _2;
         }
         // Cosine transform (DCT)
         nddct1(&mut buffer, output, &mut self.dct_handler, axis);
+    }
+}
+
+impl<A: FloatNum + std::ops::MulAssign> TransformPar for Chebyshev<A> {
+    type Physical = A;
+    type Spectral = A;
+
+    /// # Example
+    /// Forward transform along first axis
+    /// ```
+    /// use funspace::TransformPar;
+    /// use funspace::chebyshev::Chebyshev;
+    /// use funspace::utils::approx_eq;
+    /// use ndarray::prelude::*;
+    /// let mut cheby = Chebyshev::new(4);
+    /// let mut input = array![1., 2., 3., 4.];
+    /// let output = cheby.forward_par(&mut input, 0);
+    /// approx_eq(&output, &array![2.5, 1.33333333, 0. , 0.16666667]);
+    /// ```
+    fn forward_par<S, D>(
+        &mut self,
+        input: &mut ArrayBase<S, D>,
+        axis: usize,
+    ) -> Array<Self::Spectral, D>
+    where
+        S: ndarray::Data<Elem = Self::Physical>,
+        D: Dimension + ndarray::RemoveAxis,
+    {
+        use crate::utils::array_resized_axis;
+        let mut output = array_resized_axis(input, self.m, axis);
+        self.forward_inplace_par(input, &mut output, axis);
+        output
+    }
+
+    /// See [`Chebyshev::forward_par`]
+    #[allow(clippy::used_underscore_binding)]
+    fn forward_inplace_par<S1, S2, D>(
+        &mut self,
+        input: &mut ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
+        axis: usize,
+    ) where
+        S1: ndarray::Data<Elem = Self::Physical>,
+        S2: ndarray::Data<Elem = Self::Spectral> + ndarray::DataMut,
+        D: Dimension + ndarray::RemoveAxis,
+    {
+        use crate::utils::check_array_axis;
+        use ndrustfft::nddct1_par;
+        check_array_axis(input, self.n, axis, Some("chebyshev forward"));
+        check_array_axis(output, self.m, axis, Some("chebyshev forward"));
+        // Cosine transform (DCT)
+        nddct1_par(input, output, &mut self.dct_handler, axis);
+        // Correct DCT
+        let _05 = A::from_f64(1. / 2.).unwrap();
+        for mut v in output.lanes_mut(Axis(axis)) {
+            v *= &self.correct_dct_forward;
+            v[0] *= _05;
+            v[self.n - 1] *= _05;
+        }
+    }
+
+    /// # Example
+    /// Backward transform along first axis
+    /// ```
+    /// use funspace::TransformPar;
+    /// use funspace::chebyshev::Chebyshev;
+    /// use funspace::utils::approx_eq;
+    /// use ndarray::prelude::*;
+    /// let mut cheby = Chebyshev::new(4);
+    /// let mut input = array![1., 2., 3., 4.];
+    /// let output = cheby.backward_par(&mut input, 0);
+    /// approx_eq(&output, &array![-2. ,  2.5, -3.5, 10.]);
+    /// ```
+    fn backward_par<S, D>(
+        &mut self,
+        input: &mut ArrayBase<S, D>,
+        axis: usize,
+    ) -> Array<Self::Physical, D>
+    where
+        S: ndarray::Data<Elem = Self::Spectral>,
+        D: Dimension + ndarray::RemoveAxis,
+    {
+        use crate::utils::array_resized_axis;
+        let mut output = array_resized_axis(input, self.m, axis);
+        self.backward_inplace_par(input, &mut output, axis);
+        output
+    }
+
+    /// See [`Chebyshev::backward_par`]
+    ///
+    /// # Panics
+    /// Panics when input type cannot be cast from f64.
+    #[allow(clippy::used_underscore_binding)]
+    fn backward_inplace_par<S1, S2, D>(
+        &mut self,
+        input: &mut ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
+        axis: usize,
+    ) where
+        S1: ndarray::Data<Elem = Self::Spectral>,
+        S2: ndarray::Data<Elem = Self::Physical> + ndarray::DataMut,
+        D: Dimension + ndarray::RemoveAxis,
+    {
+        use crate::utils::check_array_axis;
+        use ndrustfft::nddct1_par;
+        check_array_axis(input, self.m, axis, Some("chebyshev backward"));
+        check_array_axis(output, self.n, axis, Some("chebyshev backward"));
+        // Correct
+        let mut buffer = input.to_owned();
+        let _2 = A::from_f64(2.).unwrap();
+        for mut v in buffer.lanes_mut(Axis(axis)) {
+            v *= &self.correct_dct_backward;
+            v[0] *= _2;
+            v[self.n - 1] *= _2;
+        }
+        // Cosine transform (DCT)
+        nddct1_par(&mut buffer, output, &mut self.dct_handler, axis);
     }
 }
 

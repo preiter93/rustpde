@@ -17,3 +17,4 @@ pub use funspace::LaplacianInverse;
 pub use funspace::Mass;
 pub use funspace::Size;
 pub use funspace::Transform;
+pub use funspace::TransformPar;

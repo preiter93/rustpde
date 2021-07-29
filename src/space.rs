@@ -28,6 +28,7 @@ pub trait Spaced<T, const N: usize> {
 ///
 /// First create a space, then
 /// initialize field with it.
+#[derive(Clone)]
 pub struct Space<const N: usize> {
     bases: [Base<f64>; N],
 }

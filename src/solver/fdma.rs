@@ -7,7 +7,7 @@ use ndarray::{Data, DataMut, RemoveAxis, Zip};
 use std::ops::{Add, Div, Mul};
 
 /// Solve banded system with diagonals-offsets: -2, 0, 2, 4
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Fdma<T> {
     /// Size of matrix (= size of main diagonal)
     pub n: usize,

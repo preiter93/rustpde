@@ -83,7 +83,7 @@ pub fn get_ka(ra: &f64, pr: &f64, height: &f64) -> f64 {
 /// let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
 /// // Read initial field from file
 /// // navier.read("data/flow0.000.h5");
-/// integrate(navier, 0.2,  None);
+/// integrate(&mut navier, 0.2,  None);
 /// ```
 pub struct Navier2D {
     /// Field for derivatives and transforms
@@ -118,6 +118,9 @@ pub struct Navier2D {
     pub scale: [f64; 2],
     /// diagnostics like Nu, ...
     pub diagnostics: HashMap<String, Vec<f64>>,
+    /// Time intervall for write fields
+    /// If none, same intervall as diagnostics
+    pub write_intervall: Option<f64>,
 }
 
 impl Navier2D {
@@ -210,6 +213,7 @@ impl Navier2D {
             dt,
             scale,
             diagnostics,
+            write_intervall: None,
         };
         navier._scale();
         // Boundary condition
@@ -522,8 +526,18 @@ impl Integrate for Navier2D {
 
         // Write hdf5 file
         std::fs::create_dir_all("data").unwrap();
+
+        // Write flow field
         let fname = format!("data/flow{:.*}.h5", 3, self.time);
-        self.write_to_file(&fname);
+        if let Some(dt_save) = &self.write_intervall {
+            if (self.time % dt_save) < self.dt / 2.
+                || (self.time % dt_save) > dt_save - self.dt / 2.
+            {
+                self.write_to_file(&fname);
+            }
+        } else {
+            self.write_to_file(&fname);
+        }
 
         // I/O
         let div = self.divergence();

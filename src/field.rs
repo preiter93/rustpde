@@ -5,7 +5,7 @@ pub mod read;
 pub mod write;
 use crate::bases::Differentiate;
 use crate::bases::FromOrtho;
-use crate::bases::Transform;
+use crate::bases::TransformPar;
 use crate::space::{Space1, Space2, Spaced};
 use crate::{Real, SolverField};
 use ndarray::prelude::*;
@@ -45,6 +45,7 @@ pub type Field2 = Field<Space2, f64, 2>;
 /// let bases = [cheb_dirichlet(nx), cheb_dirichlet(ny)];
 /// let mut field = Field::new(Space2D::new(bases));
 ///
+#[derive(Clone)]
 pub struct Field<S, T, const N: usize> {
     /// Number of dimensions
     pub ndim: usize,
@@ -121,11 +122,11 @@ where
 impl<S: Spaced<f64, 1>> Field<S, Real, 1> {
     /// Forward transform 1d
     pub fn forward(&mut self) {
-        self.space.get_bases_mut()[0].forward_inplace(&mut self.v, &mut self.vhat, 0);
+        self.space.get_bases_mut()[0].forward_inplace_par(&mut self.v, &mut self.vhat, 0);
     }
     /// Backward transform 1d
     pub fn backward(&mut self) {
-        self.space.get_bases_mut()[0].backward_inplace(&mut self.vhat, &mut self.v, 0);
+        self.space.get_bases_mut()[0].backward_inplace_par(&mut self.vhat, &mut self.v, 0);
     }
 
     /// Transform to parent space
@@ -152,13 +153,13 @@ impl<S: Spaced<f64, 1>> Field<S, Real, 1> {
 impl<S: Spaced<f64, 2>> Field<S, Real, 2> {
     /// Forward transform 2d
     pub fn forward(&mut self) {
-        let mut buffer = self.space.get_bases_mut()[1].forward(&mut self.v, 1);
-        self.space.get_bases_mut()[0].forward_inplace(&mut buffer, &mut self.vhat, 0);
+        let mut buffer = self.space.get_bases_mut()[1].forward_par(&mut self.v, 1);
+        self.space.get_bases_mut()[0].forward_inplace_par(&mut buffer, &mut self.vhat, 0);
     }
     /// Backward transform 2d
     pub fn backward(&mut self) {
-        let mut buffer = self.space.get_bases_mut()[0].backward(&mut self.vhat, 0);
-        self.space.get_bases_mut()[1].backward_inplace(&mut buffer, &mut self.v, 1);
+        let mut buffer = self.space.get_bases_mut()[0].backward_par(&mut self.vhat, 0);
+        self.space.get_bases_mut()[1].backward_inplace_par(&mut buffer, &mut self.v, 1);
     }
 
     /// Transform to parent space

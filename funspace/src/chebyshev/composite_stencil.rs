@@ -3,6 +3,7 @@
 //! p = S c
 //! $$
 //! where $S$ is a two-dimensional transform matrix.
+#![allow(clippy::used_underscore_binding)]
 use crate::FloatNum;
 use ndarray::prelude::*;
 
@@ -42,12 +43,14 @@ pub trait Stencil<A> {
 }
 
 #[enum_dispatch(Stencil<A>)]
+#[derive(Clone)]
 pub enum ChebyshevStencil<A: FloatNum> {
     StencilChebyshev(StencilChebyshev<A>),
     StencilChebyshevBoundary(StencilChebyshevBoundary<A>),
 }
 
 /// Container for Chebyshev Stencil (internally used)
+#[derive(Clone)]
 pub struct StencilChebyshev<A> {
     /// Number of coefficients in parent space
     n: usize,
@@ -70,6 +73,7 @@ pub struct StencilChebyshev<A> {
 /// 2 coefficients that act on $T_1$, where $T$
 /// are the basis function of the orthonormal
 /// chebyshev basis.
+#[derive(Clone)]
 pub struct StencilChebyshevBoundary<A> {
     /// Number of coefficients in parent space
     n: usize,
@@ -116,9 +120,9 @@ impl<A: FloatNum> StencilChebyshev<A> {
         let diag = Array::from_vec(vec![A::one(); m]);
         let mut low2 = Array::from_vec(vec![A::zero(); m]);
         for (k, v) in low2.iter_mut().enumerate() {
-            let _k = A::from_f64(k.pow(2) as f64).unwrap();
-            let _k2 = A::from_f64((k + 2).pow(2) as f64).unwrap();
-            *v = -A::one() * _k / _k2;
+            let k_ = A::from_f64(k.pow(2) as f64).unwrap();
+            let k2_ = A::from_f64((k + 2).pow(2) as f64).unwrap();
+            *v = -A::one() * k_ / k2_;
         }
         let (main, off) = Self::_get_main_off(&diag.view(), &low2.view());
         Self {

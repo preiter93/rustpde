@@ -115,7 +115,7 @@ impl Integrate for Diffusion1D {
 /// diff.impulse();
 /// diff.update();
 /// diff.write();
-/// integrate(diff,0.1,None);
+/// integrate(&mut diff,0.1,None);
 ///```
 pub struct Diffusion2D {
     field: Field2,

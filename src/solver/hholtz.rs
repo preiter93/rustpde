@@ -25,7 +25,8 @@ use crate::Base;
 use ndarray::prelude::*;
 use ndarray::{Data, DataMut};
 
-/// Container for Hholtz Solver
+/// Container for Hholtz
+#[derive(Clone)]
 pub struct Hholtz<T, const N: usize>
 // where
 //     T: SolverScalar,
