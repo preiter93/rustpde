@@ -65,7 +65,7 @@ use ndarray::{Data, DataMut};
 /// .. math::
 ///
 ///    g = Qx ghat = self.q.dot(ghat)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FdmaTensor<T, const N: usize> {
     n: usize,
     fdma: [Fdma<T>; 2],

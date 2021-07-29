@@ -7,6 +7,7 @@ use std::ops::{Add, Div, Mul};
 
 /// Collection of Matrix-Vector Product Solver
 //#[enum_dispatch(SolveReturn<A, D>)]
+#[derive(Clone)]
 pub enum MatVec<T> {
     /// Ndarrays Matrix Vector Product
     MatVecDot(MatVecDot<T>),
@@ -48,7 +49,7 @@ where
 /// with a matrix along the first Axis.
 ///
 /// Uses ndarrays 'dot' for matrix multiplication.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MatVecDot<T> {
     mat: Array2<T>,
 }

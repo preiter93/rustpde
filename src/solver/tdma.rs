@@ -7,7 +7,7 @@ use std::fmt::Debug;
 use std::ops::{Add, Div, Mul};
 
 /// Solve tridiagonal system with diagonals-offsets: -2, 0, 2
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tdma<T> {
     /// Size of matrix (= size of main diagonal)
     pub n: usize,

@@ -31,6 +31,7 @@ use crate::Base;
 use ndarray::prelude::*;
 
 /// Container for Poisson Solver
+#[derive(Clone)]
 pub struct Poisson<T, const N: usize> {
     solver: Box<FdmaTensor<T, N>>,
     matvec: Vec<Option<MatVec<T>>>,

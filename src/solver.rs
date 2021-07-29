@@ -68,6 +68,7 @@ pub trait SolveReturn<A, D> {
 
 /// Collection of Linalg Solver, must work for unlimited number of dimensions
 #[allow(clippy::large_enum_variant)]
+#[derive(Clone)]
 pub enum Solver<T> {
     /// Two-diagonal Solver
     Tdma(Tdma<T>),
@@ -76,6 +77,7 @@ pub enum Solver<T> {
 }
 
 /// Intented to solve field equations (limited number of dimensions)
+#[derive(Clone)]
 pub enum SolverField<T, const N: usize> {
     /// Helmholtz Type Solver
     Hholtz(Hholtz<T, N>),

@@ -92,6 +92,9 @@ pub struct Navier2DAdjoint {
     scale_adjoint: f64,
     /// diagnostics like Nu, ...
     pub diagnostics: HashMap<String, Vec<f64>>,
+    /// Time intervall for write fields
+    /// If none, same intervall as diagnostics
+    pub write_intervall: Option<f64>,
     /// residual tolerance (exit if below)
     res_tol: f64,
 }
@@ -209,11 +212,12 @@ impl Navier2DAdjoint {
             scale,
             scale_adjoint: nu,
             diagnostics,
+            write_intervall: None,
             res_tol: RES_TOL,
         };
         navier_adjoint._scale();
         // Boundary condition
-        navier_adjoint.set_temp_bc(Navier2D::bc_rbc(nx, ny), Navier2D::bc_rbc(nx, ny));
+        navier_adjoint.set_temp_bc(Navier2D::bc_rbc(nx, ny));
         // Return
         navier_adjoint
     }
@@ -241,9 +245,9 @@ impl Navier2DAdjoint {
     /// Set boundary condition field for temperature
     /// Both fields should be the same, necessary beceause
     /// fields do not implement the copy trait yet
-    pub fn set_temp_bc(&mut self, fieldbc1: Field2, fieldbc2: Field2) {
-        self.fieldbc = Some(fieldbc1);
-        self.navier.fieldbc = Some(fieldbc2);
+    pub fn set_temp_bc(&mut self, fieldbc: Field2) {
+        self.fieldbc = Some(fieldbc.clone());
+        self.navier.fieldbc = Some(fieldbc);
     }
 
     /// Reset rhs array
@@ -480,8 +484,18 @@ impl Integrate for Navier2DAdjoint {
     fn write(&mut self) {
         use std::io::Write;
         std::fs::create_dir_all("data").unwrap();
+
+        // Write flow field
         let fname = format!("data/adjoint{:.*}.h5", 3, self.time);
-        self.write_to_file(&fname);
+        if let Some(dt_save) = &self.write_intervall {
+            if (self.time % dt_save) < self.dt / 2.
+                || (self.time % dt_save) > dt_save - self.dt / 2.
+            {
+                self.write_to_file(&fname);
+            }
+        } else {
+            self.write_to_file(&fname);
+        }
 
         // I/O
         let div = self.divergence();
