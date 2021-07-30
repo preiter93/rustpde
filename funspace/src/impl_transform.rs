@@ -74,7 +74,6 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Base<A> {
     }
 }
 
-
 /// Transform trait is implemented "per hand", can't be enum_dispatched
 /// because of associated types.
 impl<A: FloatNum + std::ops::MulAssign> TransformPar for Base<A> {
