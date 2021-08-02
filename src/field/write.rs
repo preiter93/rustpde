@@ -1,6 +1,7 @@
 //! Implement writing to hdf5 file for struct Field
 use super::Field;
-use crate::hdf5::{write_to_hdf5, Hdf5};
+use crate::hdf5::write_to_hdf5;
+use crate::hdf5::Result;
 
 /// 1-D
 impl<S> Field<S, f64, 1> {
@@ -13,11 +14,11 @@ impl<S> Field<S, f64, 1> {
         }
     }
 
-    fn write_hdf5(&mut self, filename: &str, group: Option<&str>) -> hdf5::Result<()> {
-        write_to_hdf5(filename, "v", group, Hdf5::Array1(&mut self.v))?;
-        write_to_hdf5(filename, "vhat", group, Hdf5::Array1(&mut self.vhat))?;
-        write_to_hdf5(filename, "x", None, Hdf5::Array1(&mut self.x[0]))?;
-        write_to_hdf5(filename, "dx", None, Hdf5::Array1(&mut self.dx[0]))?;
+    fn write_hdf5(&mut self, filename: &str, group: Option<&str>) -> Result<()> {
+        write_to_hdf5(filename, "v", group, &self.v)?;
+        write_to_hdf5(filename, "vhat", group, &self.vhat)?;
+        write_to_hdf5(filename, "x", None, &self.x[0])?;
+        write_to_hdf5(filename, "dx", None, &self.dx[0])?;
         Ok(())
     }
 }
@@ -33,13 +34,13 @@ impl<S> Field<S, f64, 2> {
         }
     }
 
-    fn write_hdf5(&mut self, filename: &str, group: Option<&str>) -> hdf5::Result<()> {
-        write_to_hdf5(filename, "v", group, Hdf5::Array2(&mut self.v))?;
-        write_to_hdf5(filename, "vhat", group, Hdf5::Array2(&mut self.vhat))?;
-        write_to_hdf5(filename, "x", None, Hdf5::Array1(&mut self.x[0]))?;
-        write_to_hdf5(filename, "y", None, Hdf5::Array1(&mut self.x[1]))?;
-        write_to_hdf5(filename, "dx", None, Hdf5::Array1(&mut self.dx[0]))?;
-        write_to_hdf5(filename, "dy", None, Hdf5::Array1(&mut self.dx[1]))?;
+    fn write_hdf5(&mut self, filename: &str, group: Option<&str>) -> Result<()> {
+        write_to_hdf5(filename, "v", group, &self.v)?;
+        write_to_hdf5(filename, "vhat", group, &self.vhat)?;
+        write_to_hdf5(filename, "x", None, &self.x[0])?;
+        write_to_hdf5(filename, "dx", None, &self.dx[0])?;
+        write_to_hdf5(filename, "y", None, &self.x[1])?;
+        write_to_hdf5(filename, "dy", None, &self.dx[1])?;
         Ok(())
     }
 }
