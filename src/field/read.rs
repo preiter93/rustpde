@@ -9,7 +9,7 @@ where
 {
     /// Read hdf5 file and store results in Field
     pub fn read(&mut self, filename: &str, group: Option<&str>) {
-        let result = read_from_hdf5::<ndarray::Ix1, 1>(filename, "vhat", group);
+        let result = read_from_hdf5::<f64, ndarray::Ix1>(filename, "vhat", group);
         match result {
             Ok(x) => {
                 self.vhat.assign(&x);
@@ -33,7 +33,7 @@ where
     /// Supports reading of same shape but different
     /// size arrays.
     pub fn read(&mut self, filename: &str, group: Option<&str>) {
-        let result = read_from_hdf5::<ndarray::Ix2, 2>(filename, "vhat", group);
+        let result = read_from_hdf5::<f64, ndarray::Ix2>(filename, "vhat", group);
         match result {
             Ok(x) => {
                 if x.shape() == self.vhat.shape() {

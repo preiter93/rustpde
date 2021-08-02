@@ -30,11 +30,11 @@
 use super::conv_term;
 use super::Integrate;
 use crate::bases::{cheb_dirichlet, cheb_dirichlet_bc, cheb_neumann, chebyshev};
-use crate::hdf5::{read_from_hdf5, write_to_hdf5, Hdf5};
+use crate::hdf5::{read_scalar_from_hdf5, write_scalar_to_hdf5};
 use crate::solver::{Hholtz, Poisson, Solve, SolverField};
 use crate::Field2;
 use crate::Space2;
-use ndarray::{array, s, Array1, Array2};
+use ndarray::{s, Array1, Array2};
 use std::collections::HashMap;
 
 /// Return viscosity from Ra, Pr, and height of the cell
@@ -600,9 +600,8 @@ impl Navier2D {
         self.ux.read(&fname, Some("ux"));
         self.uy.read(&fname, Some("uy"));
         self.pres[0].read(&fname, Some("pres"));
-        // // Additional info
-        let time = read_from_hdf5::<ndarray::Ix1, 1>(&fname, "time", None).unwrap();
-        self.time = time[0];
+        // Read scalars
+        self.time = read_scalar_from_hdf5::<f64>(&fname, "time", None).unwrap();
         println!(" <== {:?}", fname);
     }
 
@@ -636,17 +635,12 @@ impl Navier2D {
         self.ux.write(&fname, Some("ux"));
         self.uy.write(&fname, Some("uy"));
         self.pres[0].write(&fname, Some("pres"));
-        // Additional info
-        let mut time = array![self.time];
-        let mut ra = array![self.ra];
-        let mut pr = array![self.pr];
-        let mut nu = array![self.nu];
-        let mut ka = array![self.ka];
-        write_to_hdf5(&fname, "time", None, Hdf5::Array1(&mut time)).ok();
-        write_to_hdf5(&fname, "ra", None, Hdf5::Array1(&mut ra)).ok();
-        write_to_hdf5(&fname, "pr", None, Hdf5::Array1(&mut pr)).ok();
-        write_to_hdf5(&fname, "nu", None, Hdf5::Array1(&mut nu)).ok();
-        write_to_hdf5(&fname, "kappa", None, Hdf5::Array1(&mut ka)).ok();
+        // Write scalars
+        write_scalar_to_hdf5(&fname, "time", None, self.time).ok();
+        write_scalar_to_hdf5(&fname, "ra", None, self.ra).ok();
+        write_scalar_to_hdf5(&fname, "pr", None, self.pr).ok();
+        write_scalar_to_hdf5(&fname, "nu", None, self.nu).ok();
+        write_scalar_to_hdf5(&fname, "kappa", None, self.ka).ok();
         // Undo addition of bc
         if self.fieldbc.is_some() {
             self.temp.backward();
