@@ -35,6 +35,7 @@ pub struct Space<const N: usize> {
 
 impl<const N: usize> Space<N> {
     /// Return new space
+    #[must_use]
     pub fn new(bases: [Base<f64>; N]) -> Self {
         Space { bases }
     }

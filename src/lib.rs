@@ -90,6 +90,8 @@
 #![warn(missing_docs)]
 #![warn(missing_doc_code_examples)]
 #![allow(clippy::unnecessary_cast)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::module_name_repetitions)]
 #[macro_use]
 extern crate enum_dispatch;
 pub mod bases;

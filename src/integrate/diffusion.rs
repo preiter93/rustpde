@@ -56,6 +56,8 @@ impl Diffusion1D {
     }
 
     /// Add constant force
+    /// ## Panics
+    /// Panics when shapes of fields do not match.
     pub fn add_force(&mut self, force: &Array1<f64>) {
         assert!(force.len() == self.field.v.len());
         self.force = Some(force.to_owned());
@@ -104,7 +106,7 @@ impl Integrate for Diffusion1D {
 ///
 /// Fully implicit
 ///.. math:
-///    [(1-kappa*dt*D2_x) + (1-kappa*dt*D2_y)] unew = uold
+///    [(1-kappa*dt*D2x) + (1-kappa*dt*D2y)] unew = uold
 ///
 ///```
 /// use rustpde::*;
@@ -156,12 +158,16 @@ impl Diffusion2D {
     }
 
     /// Add external force
+    /// ## Panics
+    /// Panics when shapes of fields do not match.
     pub fn add_force(&mut self, force: &Array2<f64>) {
         assert!(force.shape() == self.field.v.shape());
         self.force = Some(force.to_owned());
     }
 
     /// Add force from inhomogeneous bc's
+    /// ## Panics
+    /// Panics when shapes of fields do not match.
     pub fn add_fieldbc(&mut self, fieldbc: Field2) {
         assert!(fieldbc.v.shape() == self.field.v.shape());
         self.fieldbc = Some(fieldbc);

@@ -100,7 +100,7 @@ pub struct Navier2DAdjoint {
 }
 
 impl Navier2DAdjoint {
-    /// Returns Navier-Stokes Solver, an integrable type, used with pde::integrate
+    /// Returns Navier-Stokes Solver, an integrable type, used with `pde::integrate`
     pub fn new(
         nx: usize,
         ny: usize,
@@ -111,8 +111,8 @@ impl Navier2DAdjoint {
         aspect: f64,
     ) -> Self {
         let scale = [aspect, 1.];
-        let nu = get_nu(&ra, &pr, &(scale[1] * 2.0));
-        let ka = get_ka(&ra, &pr, &(scale[1] * 2.0));
+        let nu = get_nu(ra, pr, scale[1] * 2.0);
+        let ka = get_ka(ra, pr, scale[1] * 2.0);
         let ux = [
             Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)])),
             Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)])),
@@ -138,7 +138,7 @@ impl Navier2DAdjoint {
         Self::from_fields(navier, temp, ux, uy, nu, ka, ra, pr, dt, scale)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::similar_names)]
     fn from_fields(
         navier: Navier2D,
         temp: [Field2; 2],
@@ -225,18 +225,16 @@ impl Navier2DAdjoint {
     /// Rescale x & y coordinates of fields.
     /// Only affects output of files
     fn _scale(&mut self) {
-        for field in [
+        for field in &mut [
             &mut self.temp[0],
             &mut self.ux[0],
             &mut self.uy[0],
             &mut self.pres[0],
-        ]
-        .iter_mut()
-        {
+        ] {
             field.x[0] *= self.scale[0];
             field.x[1] *= self.scale[1];
         }
-        for field in [&mut self.temp[1], &mut self.ux[1], &mut self.uy[1]].iter_mut() {
+        for field in &mut [&mut self.temp[1], &mut self.ux[1], &mut self.uy[1]] {
             field.x[0] *= self.scale[0];
             field.x[1] *= self.scale[1];
         }
@@ -394,17 +392,18 @@ impl Navier2DAdjoint {
     /// uxnew = ux - c*dpdx
     ///
     /// uynew = uy - c*dpdy
+    #[allow(clippy::similar_names)]
     fn project_velocity(&mut self, c: f64) {
         let dpdx = self.pres[1].grad([1, 0], Some(self.scale));
         let dpdy = self.pres[1].grad([0, 1], Some(self.scale));
-        let ux_old = self.ux[0].vhat.clone();
-        let uy_old = self.uy[0].vhat.clone();
+        let old_ux = self.ux[0].vhat.clone();
+        let old_uy = self.uy[0].vhat.clone();
         self.ux[0].from_parent(&dpdx);
         self.uy[0].from_parent(&dpdy);
         self.ux[0].vhat *= -c;
         self.uy[0].vhat *= -c;
-        self.ux[0].vhat += &ux_old;
-        self.uy[0].vhat += &uy_old;
+        self.ux[0].vhat += &old_ux;
+        self.uy[0].vhat += &old_uy;
     }
 
     /// Divergence: duxdx + duydy
@@ -565,7 +564,7 @@ fn norm_l2(array: &Array2<f64>) -> f64 {
 impl Navier2DAdjoint {
     /// Returns Nusselt number (heat flux at the plates)
     /// $$
-    /// Nu = \langle - dTdz \rangle_x (0/H))
+    /// Nu = \langle - dTdz \rangle\\_x (0/H))
     /// $$
     pub fn eval_nu(&mut self) -> f64 {
         use super::functions::eval_nu;
@@ -579,7 +578,7 @@ impl Navier2DAdjoint {
 
     /// Returns volumetric Nusselt number
     /// $$
-    /// Nuvol = \langle uy*T/kappa - dTdz \rangle_V
+    /// Nuvol = \langle uy*T/kappa - dTdz \rangle\\_V
     /// $$
     pub fn eval_nuvol(&mut self) -> f64 {
         use super::functions::eval_nuvol;
@@ -606,6 +605,9 @@ impl Navier2DAdjoint {
     }
 
     /// Read from existing file
+    ///
+    /// ## Panics
+    /// If file can't be read
     pub fn read(&mut self, fname: &str) {
         // Field
         self.temp[0].read(&fname, Some("temp"));

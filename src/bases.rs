@@ -2,9 +2,9 @@
 //! Use external package funspace
 //!
 //! Implemented:
-//! - Chebyshev (Orthonormal), see [`chebyshev()`]
-//! - ChebDirichlet (Composite), see [`cheb_dirichlet()`]
-//! - ChebNeumann (Composite), see [`cheb_neumann()`]
+//! - `Chebyshev` (Orthonormal), see [`chebyshev()`]
+//! - `ChebDirichlet` (Composite), see [`cheb_dirichlet()`]
+//! - `ChebNeumann` (Composite), see [`cheb_neumann()`]
 pub use funspace::cheb_dirichlet;
 pub use funspace::cheb_dirichlet_bc;
 pub use funspace::cheb_neumann;

@@ -55,7 +55,7 @@ pub struct MatVecDot<T> {
 }
 
 impl<T: SolverScalar> MatVecDot<T> {
-    /// Return new MatVecDot (wrapper around ndarray)
+    /// Return new `MatVecDot` (wrapper around ndarray)
     pub fn new(mat: &Array2<T>) -> Self {
         MatVecDot {
             mat: mat.to_owned(),

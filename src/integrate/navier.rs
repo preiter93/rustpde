@@ -38,13 +38,13 @@ use ndarray::{s, Array1, Array2};
 use std::collections::HashMap;
 
 /// Return viscosity from Ra, Pr, and height of the cell
-pub fn get_nu(ra: &f64, pr: &f64, height: &f64) -> f64 {
+pub fn get_nu(ra: f64, pr: f64, height: f64) -> f64 {
     let f = pr / (ra / height.powf(3.0));
     f.sqrt()
 }
 
 /// Return diffusivity from Ra, Pr, and height of the cell
-pub fn get_ka(ra: &f64, pr: &f64, height: &f64) -> f64 {
+pub fn get_ka(ra: f64, pr: f64, height: f64) -> f64 {
     let f = 1. / ((ra / height.powf(3.0)) * pr);
     f.sqrt()
 }
@@ -121,10 +121,12 @@ pub struct Navier2D {
     /// Time intervall for write fields
     /// If none, same intervall as diagnostics
     pub write_intervall: Option<f64>,
+    /// Add a solid obstacle
+    pub solid: Option<Array2<f64>>,
 }
 
 impl Navier2D {
-    /// Returns Navier-Stokes Solver, an integrable type, used with pde::integrate
+    /// Returns Navier-Stokes Solver, an integrable type, used with `pde::integrate`
     pub fn new(
         nx: usize,
         ny: usize,
@@ -135,8 +137,8 @@ impl Navier2D {
         aspect: f64,
     ) -> Self {
         let scale = [aspect, 1.];
-        let nu = get_nu(&ra, &pr, &(scale[1] * 2.0));
-        let ka = get_ka(&ra, &pr, &(scale[1] * 2.0));
+        let nu = get_nu(ra, pr, scale[1] * 2.0);
+        let ka = get_ka(ra, pr, scale[1] * 2.0);
         let ux = Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)]));
         let uy = Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)]));
         let temp = if adiabatic {
@@ -147,7 +149,7 @@ impl Navier2D {
         Self::from_fields(temp, ux, uy, nu, ka, ra, pr, dt, scale)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::similar_names)]
     fn from_fields(
         temp: Field2,
         ux: Field2,
@@ -214,6 +216,7 @@ impl Navier2D {
             scale,
             diagnostics,
             write_intervall: None,
+            solid: None,
         };
         navier._scale();
         // Boundary condition
@@ -227,14 +230,12 @@ impl Navier2D {
     /// Rescale x & y coordinates of fields.
     /// Only affects output of files
     fn _scale(&mut self) {
-        for field in [
+        for field in &mut [
             &mut self.temp,
             &mut self.ux,
             &mut self.uy,
             &mut self.pres[0],
-        ]
-        .iter_mut()
-        {
+        ] {
             field.x[0] *= self.scale[0];
             field.x[1] *= self.scale[1];
         }
@@ -311,6 +312,16 @@ impl Navier2D {
             conv += &conv_term(field, &mut self.field, ux, [1, 0], Some(self.scale));
             conv += &conv_term(field, &mut self.field, uy, [0, 1], Some(self.scale));
         }
+        // + solid interaction
+        if let Some(solid) = &self.solid {
+            let eta = 0.001;
+            self.temp.backward();
+            let damp = self.fieldbc.as_ref().map_or_else(
+                || -1. / eta * solid * &self.temp.v,
+                |field| -1. / eta * solid * &(&self.temp.v + &field.v),
+            );
+            conv -= &damp;
+        }
         // -> spectral space
         self.field.v.assign(&conv);
         self.field.forward();
@@ -322,6 +333,12 @@ impl Navier2D {
         // + ux * dudx + uy * dudy
         let mut conv = conv_term(&self.ux, &mut self.field, ux, [1, 0], Some(self.scale));
         conv += &conv_term(&self.ux, &mut self.field, uy, [0, 1], Some(self.scale));
+        // + solid interaction
+        if let Some(solid) = &self.solid {
+            let eta = 0.001;
+            let damp = -1. / eta * solid * ux;
+            conv -= &damp;
+        }
         // -> spectral space
         self.field.v.assign(&conv);
         self.field.forward();
@@ -333,6 +350,12 @@ impl Navier2D {
         // + ux * dudx + uy * dudy
         let mut conv = conv_term(&self.uy, &mut self.field, ux, [1, 0], Some(self.scale));
         conv += &conv_term(&self.uy, &mut self.field, uy, [0, 1], Some(self.scale));
+        // + solid interaction
+        if let Some(solid) = &self.solid {
+            let eta = 0.001;
+            let damp = -1. / eta * solid * uy;
+            conv -= &damp;
+        }
         // -> spectral space
         self.field.v.assign(&conv);
         self.field.forward();
@@ -341,7 +364,7 @@ impl Navier2D {
 
     /// Solve horizontal momentum equation
     /// $$
-    /// (1 - \delta t  \mathcal{D}) u_new = -dt*C(u) - \delta t grad(p) + \delta t f + u
+    /// (1 - \delta t  \mathcal{D}) u\\_new = -dt*C(u) - \delta t grad(p) + \delta t f + u
     /// $$
     fn solve_ux(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) {
         self.zero_rhs();
@@ -383,10 +406,12 @@ impl Navier2D {
     }
 
     /// Correct velocity field.
-    ///
+    /// $$
     /// uxnew = ux - c*dpdx
-    ///
+    /// $$
     /// uynew = uy - c*dpdy
+    /// $$
+    #[allow(clippy::similar_names)]
     fn project_velocity(&mut self, c: f64) {
         let dpdx = self.pres[1].grad([1, 0], Some(self.scale));
         let dpdy = self.pres[1].grad([0, 1], Some(self.scale));
@@ -405,8 +430,9 @@ impl Navier2D {
     }
 
     /// Solve temperature equation:
-    ///
-    /// (1 - dt*D) temp_new = -dt*C(temp) + dt*f_bc + temp
+    /// $$
+    /// (1 - dt*D) temp\\_new = -dt*C(temp) + dt*fbc + temp
+    /// $$
     fn solve_temp(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) {
         self.zero_rhs();
         // + old field
@@ -425,9 +451,9 @@ impl Navier2D {
     }
 
     /// Solve pressure poisson equation
-    ///
+    /// $$
     /// D2 pres = f
-    ///
+    /// $$
     /// pseu: pseudo pressure ( in code it is pres\[1\] )
     fn solve_pres(&mut self, f: &Array2<f64>) {
         //self.pres[1].vhat.assign(&self.solver[3].solve(&f));
@@ -445,7 +471,7 @@ impl Navier2D {
 impl Navier2D {
     /// Returns Nusselt number (heat flux at the plates)
     /// $$
-    /// Nu = \langle - dTdz \rangle_x (0/H))
+    /// Nu = \langle - dTdz \rangle\\_x (0/H))
     /// $$
     pub fn eval_nu(&mut self) -> f64 {
         use super::functions::eval_nu;
@@ -454,7 +480,7 @@ impl Navier2D {
 
     /// Returns volumetric Nusselt number
     /// $$
-    /// Nuvol = \langle uy*T/kappa - dTdz \rangle_V
+    /// Nuvol = \langle uy*T/kappa - dTdz \rangle\\_V
     /// $$
     pub fn eval_nuvol(&mut self) -> f64 {
         use super::functions::eval_nuvol;
@@ -594,6 +620,9 @@ fn norm_l2(array: &Array2<f64>) -> f64 {
 
 impl Navier2D {
     /// Read from existing file
+    ///
+    /// ## Panics
+    /// Panics if file cannot be read.
     pub fn read(&mut self, fname: &str) {
         // Field
         self.temp.read(&fname, Some("temp"));

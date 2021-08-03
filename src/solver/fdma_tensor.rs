@@ -4,6 +4,7 @@
 //! dimensions are diagonalized by an eigendecomposition. This
 //! adds two matrix multiplications per dimension to the solve
 //! step, one before the fdma solver, and one after.
+#![allow(clippy::doc_markdown)]
 use super::utils::{diag, eig, inv};
 use super::Fdma;
 use super::Solve;
@@ -66,6 +67,7 @@ use ndarray::{Data, DataMut};
 ///
 ///    g = Qx ghat = self.q.dot(ghat)
 #[derive(Debug, Clone)]
+#[allow(clippy::similar_names)]
 pub struct FdmaTensor<T, const N: usize> {
     n: usize,
     fdma: [Fdma<T>; 2],
@@ -79,20 +81,20 @@ pub struct FdmaTensor<T, const N: usize> {
 }
 
 impl<const N: usize> FdmaTensor<f64, N> {
-    /// Supply array of matrices a and c, as defined in the definition of FdmaTensor.
+    /// Supply array of matrices a and c, as defined in the definition of `FdmaTensor`.
     ///
     /// Eigendecompoiton:
     ///
     /// The first N-1 dimensions are diagonalized by an eigendecomposition,
     /// If the matrices of a particular dimension are already diagonal,
-    /// the respective place in variable a_is_diag should be set to true.
+    /// the respective place in variable `a_is_diag` should be set to true.
     /// In this case, the eigenvalues must be supplied in 'a' as a diagonal matrix,
     /// and c is not used any further.
     ///
     /// 1-Dimensional problems:
     ///
     /// In this case, only a, which must be a banded matrix, is used in solve.
-    #[allow(clippy::many_single_char_names)]
+    #[allow(clippy::many_single_char_names, clippy::similar_names)]
     pub fn from_matrix(a: [&Array2<f64>; N], c: [&Array2<f64>; N], a_is_diag: [&bool; N]) -> Self {
         //todo!()
         let mut fwd: Vec<Option<Array2<f64>>> = Vec::new();

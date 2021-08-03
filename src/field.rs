@@ -31,20 +31,25 @@ pub type Field2 = Field<Space2, f64, 2>;
 ///
 ///   Grid points (physical space)
 ///
-/// solvers: HashMap<String, SolverField>
+/// solvers: HashMap<String, `SolverField`>
 ///
 ///  Add plans for various equations
 ///
 /// Field is derived from space.
-/// space mplements trait IsSpace, which defines
+/// space mplements trait `Spaced`, which defines
 /// forward / backward transform from physical
 /// to spectral space + derivative in spectral space
 ///
-///
-/// let (nx, ny) = (5, 5);
-/// let bases = [cheb_dirichlet(nx), cheb_dirichlet(ny)];
-/// let mut field = Field::new(Space2D::new(bases));
-///
+/// # Example
+/// 2-D field in chebyshev space
+///```
+/// use rustpde::cheb_dirichlet;
+/// use rustpde::Space2;
+/// use rustpde::Field2;
+/// let cdx = cheb_dirichlet(8);
+/// let cdy = cheb_dirichlet(6);
+/// let field = Field2::new(Space2::new([cdx,cdy]));
+///```
 #[derive(Clone)]
 pub struct Field<S, T, const N: usize> {
     /// Number of dimensions
@@ -68,17 +73,6 @@ where
     S: Spaced<T, N>,
 {
     /// Returns field
-    ///
-    /// # Example
-    /// 2-D field in chebyshev space
-    ///```
-    /// use rustpde::cheb_dirichlet;
-    /// use rustpde::Space2;
-    /// use rustpde::Field2;
-    /// let cdx = cheb_dirichlet(8);
-    /// let cdy = cheb_dirichlet(6);
-    /// let field = Field2::new(Space2::new([cdx,cdy]));
-    ///```
     pub fn new(space: S) -> Self {
         let ndim = N;
         let v = space.ndarr_phys();
@@ -141,6 +135,7 @@ impl<S: Spaced<f64, 1>> Field<S, Real, 1> {
     }
 
     /// Gradient
+    #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
     fn grad(&self, deriv: [usize; 1], scale: Option<[f64; 1]>) -> Array1<Real> {
         let mut output = self.space.get_bases()[0].differentiate(&self.vhat, deriv[0], 0);
         if let Some(s) = scale {
@@ -176,6 +171,7 @@ impl<S: Spaced<f64, 2>> Field<S, Real, 2> {
     }
 
     /// Gradient
+    #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
     pub fn grad(&self, deriv: [usize; 2], scale: Option<[f64; 2]>) -> Array2<Real> {
         let buffer = self.space.get_bases()[0].differentiate(&self.vhat, deriv[0], 0);
         let mut output = self.space.get_bases()[1].differentiate(&buffer, deriv[1], 1);

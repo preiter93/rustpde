@@ -39,7 +39,7 @@ where
     /// Initialize Fdma from matrix.
     /// Extracts only diagonals; no forward sweep is performed.
     /// Note that self.solve, for performance reasons, does not
-    /// do the forward_sweep itself. So, if from_matrix_raw
+    /// do the `forward_sweep` itself. So, if `from_matrix_raw`
     /// is used, this step must be executed manually before solve
     pub fn from_matrix_raw(a: &Array2<T>) -> Self {
         Fdma {
@@ -52,7 +52,7 @@ where
         }
     }
 
-    /// Initialize Fdma from diagonals
+    /// Initialize `Fdma` from diagonals
     /// Precomputes the forward sweep.
     pub fn from_diags(low: &Array1<T>, dia: &Array1<T>, up1: &Array1<T>, up2: &Array1<T>) -> Self {
         let mut fdma = Fdma {

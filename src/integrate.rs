@@ -4,11 +4,12 @@ pub mod diffusion;
 mod functions;
 pub mod navier;
 pub mod navier_adjoint;
+pub mod solid_masks;
 pub use conv_term::conv_term;
 pub use navier::Navier2D;
 pub use navier_adjoint::Navier2DAdjoint;
 
-const MAX_TIMESTEP: usize = 10000000;
+const MAX_TIMESTEP: usize = 10_000_000;
 
 /// Integrate trait, step forward in time, and write results
 pub trait Integrate {
@@ -26,7 +27,7 @@ pub trait Integrate {
 
 /// Integrade pde, that implements the Integrate trait.
 ///
-/// Specify save_intervall to force writing an output.
+/// Specify `save_intervall` to force writing an output.
 ///
 /// Stop Criteria:
 /// 1. Timestep limit
