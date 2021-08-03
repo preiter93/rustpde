@@ -1,7 +1,7 @@
 use crate::Field2;
 /// Returns Nusselt number (heat flux at the plates)
 /// $$
-/// Nu = \langle - dTdz \rangle_x (0/H))
+/// Nu = \langle - dTdz \rangle\\_x (0/H))
 /// $$
 pub fn eval_nu(
     temp: &mut Field2,
@@ -25,7 +25,7 @@ pub fn eval_nu(
 
 /// Returns volumetric Nusselt number
 /// $$
-/// Nuvol = \langle uy*T/kappa - dTdz \rangle_V
+/// Nuvol = \langle uy*T/kappa - dTdz \rangle\\_V
 /// $$
 pub fn eval_nuvol(
     temp: &mut Field2,
@@ -69,9 +69,7 @@ pub fn eval_re(
 ) -> f64 {
     ux.backward();
     uy.backward();
-    let ux2 = ux.v.mapv(|x| x.powi(2));
-    let uy2 = uy.v.mapv(|x| x.powi(2));
-    let ekin = &ux2 + &uy2;
+    let ekin = &ux.v.mapv(|x| x.powi(2)) + &uy.v.mapv(|x| x.powi(2));
     field.v.assign(&ekin.mapv(f64::sqrt));
     field.v *= 2. * scale[1] / nu;
     field.average()

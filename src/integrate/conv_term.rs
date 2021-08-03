@@ -13,7 +13,7 @@ use ndarray::Array2;
 ///        Velocity field in physical space
 ///
 ///   *deriv*: [usize; 2]
-///        \[1,0\] for partial_x, \[0,1\] for partial_y
+///        \[1,0\] for partial x, \[0,1\] for partial y
 ///
 /// # Return
 /// Array of u*dvdx term in physical space.
@@ -21,17 +21,17 @@ use ndarray::Array2;
 /// Collect all convective terms, thatn transform to spectral space.
 pub fn conv_term(
     field: &Field2,
-    dfield: &mut Field2,
+    deriv_field: &mut Field2,
     u: &Array2<f64>,
     deriv: [usize; 2],
     scale: Option<[f64; 2]>,
 ) -> Array2<f64> {
     //dvdx
-    dfield.vhat *= 0.;
-    dfield.vhat.assign(&field.grad(deriv, scale));
-    dfield.backward();
+    deriv_field.vhat *= 0.;
+    deriv_field.vhat.assign(&field.grad(deriv, scale));
+    deriv_field.backward();
     //u*dvdx
-    u * &dfield.v
+    u * &deriv_field.v
 }
 
 #[cfg(test)]

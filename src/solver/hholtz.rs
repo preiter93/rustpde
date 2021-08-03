@@ -80,14 +80,14 @@ where
                 let eye = b.laplace_inv_eye();
                 let mat = eye.dot(&pinv).dot(&mass.slice(ndarray::s![.., 2..]))
                     - eye.dot(&mass.slice(ndarray::s![.., 2..])) * c;
-                let mat = mat.mapv(|elem| elem.into());
+                let mat = mat.mapv(std::convert::Into::into);
                 Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
             }
             Base::CompositeChebyshev(ref b) => {
                 let pinv = b.laplace_inv();
                 let eye = b.laplace_inv_eye();
                 let mat = eye.dot(&pinv).dot(&mass) - eye.dot(&mass) * c;
-                let mat = mat.mapv(|elem| elem.into());
+                let mat = mat.mapv(std::convert::Into::into);
                 Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
             } //_ => todo!(),
         }
@@ -100,7 +100,7 @@ where
         use crate::solver::MatVecDot;
         let pinv = base.laplace_inv();
         let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
-        let mat = mat.mapv(|elem| elem.into());
+        let mat = mat.mapv(std::convert::Into::into);
         let matvec = MatVec::MatVecDot(MatVecDot::new(&mat));
         Some(matvec)
     }
@@ -156,16 +156,13 @@ where
         S2: Data<Elem = A> + DataMut,
     {
         // Matvec
-        let rhs = if let Some(x) = &self.matvec[0] {
-            x.solve(&input, 0)
-        } else {
-            input.to_owned()
-        };
-        let rhs = if let Some(x) = &self.matvec[1] {
-            x.solve(&rhs, 1)
-        } else {
-            rhs
-        };
+        let mut rhs = self.matvec[0]
+            .as_ref()
+            .map_or_else(|| input.to_owned(), |x| x.solve(&input, 0));
+        if let Some(x) = &self.matvec[1] {
+            rhs = x.solve(&rhs, 1);
+        }
+
         // Solve
         self.solver[0].solve(&rhs, output, 0);
         self.solver[1].solve(&output.to_owned(), output, 1);

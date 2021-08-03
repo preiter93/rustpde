@@ -13,7 +13,7 @@
 //! eigendecomposition on the non - outermost
 //! dimensions of the form
 //! ..math:
-//!     (A + lam_i*C) x_i^* = b_i^*
+//!   ``` (A + lam_i*C) x_i^* = b_i^* ```
 //!
 //! Chebyshev bases: The equation becomes
 //! banded after multiplication with the pseudoinverse
@@ -70,12 +70,12 @@ impl<const N: usize> Poisson<f64, N> {
         let a = vec_to_array::<&Array2<f64>, N>(vec.iter().collect());
         // c
         let vec = Self::get_c_from_space(space, c);
-        let c = vec_to_array::<&Array2<f64>, N>(vec.iter().collect());
+        let arr_c = vec_to_array::<&Array2<f64>, N>(vec.iter().collect());
         // is_diag
         let vec = Self::get_is_diag_from_space(space);
         let is_diag = vec_to_array::<&bool, N>(vec.iter().collect());
 
-        let mut solver = FdmaTensor::from_matrix(a, c, is_diag);
+        let mut solver = FdmaTensor::from_matrix(a, arr_c, is_diag);
 
         // Handle singularity (2D)
         if N == 2 && solver.lam[0][0].abs() < 1e-10 {
@@ -208,15 +208,11 @@ impl Solve<f64, ndarray::Ix2> for Poisson<f64, 2> {
         S2: ndarray::Data<Elem = f64> + ndarray::DataMut,
     {
         // Matvec
-        let rhs = if let Some(x) = &self.matvec[0] {
-            x.solve(&input, 0)
-        } else {
-            input.to_owned()
-        };
-        let rhs = if let Some(x) = &self.matvec[1] {
-            x.solve(&rhs, 1)
-        } else {
-            rhs
+        let mut rhs = self.matvec[0]
+            .as_ref()
+            .map_or_else(|| input.to_owned(), |x| x.solve(&input, 0));
+        if let Some(x) = &self.matvec[1] {
+            rhs = x.solve(&rhs, 1)
         };
         self.solver.solve(&rhs, output, 0);
     }

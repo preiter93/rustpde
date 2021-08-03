@@ -1,6 +1,7 @@
 //! # Collection of linear algebra Solver
 //!
 //! Must be updated ...
+#![allow(clippy::module_name_repetitions)]
 pub mod fdma;
 pub mod fdma_tensor;
 pub mod hholtz;

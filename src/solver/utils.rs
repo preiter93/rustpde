@@ -11,6 +11,9 @@ use std::convert::TryInto;
 // use nalgebra_lapack::Eigen;
 /// Return the diagonal of a one-dimensional array.
 /// Parameter offset defines which diagonal is returned
+/// ## Panics
+/// Panics when input is not square or requested diag
+/// is larger than matrix size.
 pub fn diag<T: LinalgScalar>(a: &Array2<T>, offset: i8) -> Array1<T> {
     assert!(
         a.is_square(),
@@ -44,7 +47,7 @@ pub fn diag<T: LinalgScalar>(a: &Array2<T>, offset: i8) -> Array1<T> {
 /// The output is already sorted with respect to the
 /// eigenvalues, i.e. largest -> smallest.
 ///
-/// Example
+/// # Example
 /// ```
 /// use ndarray::array;
 /// use rustpde::solver::utils::eig;
@@ -57,9 +60,12 @@ pub fn diag<T: LinalgScalar>(a: &Array2<T>, offset: i8) -> Array1<T> {
 ///     ];
 /// let (e, evec, evec_inv) = eig(&test);
 /// ```
+///
+/// ## Panics
+/// Panics if eigendecomposition or inverse fails.
 pub fn eig(a: &Array2<f64>) -> (Array1<f64>, Array2<f64>, Array2<f64>) {
     use ndarray::Axis;
-    use ndarray_linalg::*;
+    use ndarray_linalg::Eig;
 
     // use old ndarray version, which supports linalg
     let (n, m) = (a.shape()[0], a.shape()[1]);
@@ -92,11 +98,11 @@ pub fn eig(a: &Array2<f64>) -> (Array1<f64>, Array2<f64>, Array2<f64>) {
 }
 
 /// Return inverse of square matrix
+/// ## Panics
+/// Panics when computation of inverse fails.
 pub fn inv(a: &Array2<f64>) -> Array2<f64> {
-    use ndarray_linalg::*;
+    use ndarray_linalg::Inverse;
     a.inv().unwrap()
-    //let inverse: Array2_old<f64> = ndarray_to_old(a).inv().unwrap();
-    //ndarray_to_new(&inverse)
 }
 
 // // Convert 2d to old ndarray
@@ -221,6 +227,9 @@ mod tests {
 // }
 
 /// Convert dynamically sized vector to static array
+///
+/// ## Panics
+/// Mismatching size of vector and array
 pub fn vec_to_array<T, const N: usize>(v: Vec<T>) -> [T; N] {
     v.try_into()
         .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", N, v.len()))
