@@ -1,0 +1,70 @@
+\documentclass[12pt]{standalone}
+\usepackage{tikz}
+\usepackage{pgf}
+\usepackage{pgfplots}
+\usetikzlibrary{arrows}
+\usetikzlibrary{calc}
+\usetikzlibrary{shapes.geometric}
+\pgfplotsset{compat=newest}
+
+\definecolor{yelc}{RGB}{230,159,0}
+\definecolor{gfblue5}{RGB}{0, 13, 52}
+\definecolor{gfblue4}{RGB}{0, 102, 155}
+\definecolor{gfblue3}{RGB}{0, 137, 204}
+\definecolor{gfblue2}{RGB}{7, 170, 255}
+\definecolor{gfblue1}{RGB}{130, 211, 255}
+\definecolor{gfred1}{RGB}{255, 117, 186}
+\definecolor{gfred2}{RGB}{255, 0, 124}
+\definecolor{gfred3}{RGB}{196, 0, 96}
+\definecolor{gfred4}{RGB}{153, 0, 76}
+\definecolor{gfred5}{RGB}{52, 0, 13}
+\setlength{\unitlength}{1cm}
+
+\begin{document}
+\begin{picture}(5.9,5.5)
+\put(-0.25,0){
+\begin{tikzpicture}[]
+\begin{axis}[	
+	enlargelimits=false,
+	scale only axis,
+	height=4.0cm,
+   	width=4.0cm,
+	xlabel={ $x$},
+	ylabel={ $y$},
+	xlabel style={yshift=0.0cm,xshift=0.cm},
+	ylabel style={xshift=-0.0cm,yshift=-0.2cm},
+	xtick pos=left,
+	ytick pos=left,
+	every tick/.style={black},
+	major tick length=.1cm,
+	minor tick length=.5mm,
+	xtick = {-1, 0, 1},
+	ytick = {-1, 0, 1},
+	xmin = -1,
+	xmax = 1,
+	ymin = -1,
+	ymax = 1,
+	legend style={nodes={scale=0.5}},
+	%log y ticks with fixed point,
+	legend pos = north west,
+   ] 
+
+\addplot[color=gfblue3, solid, thick]
+table[x expr=\thisrowno{1},y expr=\thisrowno{2}] {../roll1/flow_ra5.99e3_trajectory.txt};
+\addlegendentry{$Ra = 6.0\cdot 10^3$}
+
+\addplot[color=black, solid, thick]
+table[x expr=\thisrowno{1},y expr=\thisrowno{2}] {../roll1/flow_ra1.00e4_trajectory.txt};
+\addlegendentry{$Ra = 1.0\cdot 10^4$}
+
+\addplot[color=gfred3, solid, thick]
+table[x expr=\thisrowno{1},y expr=\thisrowno{2}] {../roll1/flow_ra8.91e4_trajectory.txt};
+\addlegendentry{$Ra = 8.91\cdot 10^4$}
+
+\end{axis}
+
+
+\end{tikzpicture}
+}
+\end{picture}
+\end{document}
