@@ -314,7 +314,7 @@ impl Navier2D {
         }
         // + solid interaction
         if let Some(solid) = &self.solid {
-            let eta = 0.001;
+            let eta = 1e-3;
             self.temp.backward();
             let damp = self.fieldbc.as_ref().map_or_else(
                 || -1. / eta * solid * &self.temp.v,
@@ -335,7 +335,7 @@ impl Navier2D {
         conv += &conv_term(&self.ux, &mut self.field, uy, [0, 1], Some(self.scale));
         // + solid interaction
         if let Some(solid) = &self.solid {
-            let eta = 0.001;
+            let eta = 1e-3;
             let damp = -1. / eta * solid * ux;
             conv -= &damp;
         }
@@ -352,7 +352,7 @@ impl Navier2D {
         conv += &conv_term(&self.uy, &mut self.field, uy, [0, 1], Some(self.scale));
         // + solid interaction
         if let Some(solid) = &self.solid {
-            let eta = 0.001;
+            let eta = 1e-3;
             let damp = -1. / eta * solid * uy;
             conv -= &damp;
         }
