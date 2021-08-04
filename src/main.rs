@@ -2,6 +2,7 @@ use rustpde::integrate;
 use rustpde::integrate::solid_masks::solid_cylinder_inner;
 use rustpde::integrate::Navier2D;
 use rustpde::Integrate;
+use rustpde::hdf5::write_to_hdf5;
 // fn main() {
 //     // Parameters
 //     let (nx, ny) = (14, 14);
@@ -23,7 +24,7 @@ use rustpde::Integrate;
 fn main() {
     // Parameters
     let (nx, ny) = (129, 129);
-    let ra = 1e6;
+    let ra = 1e4;
     let pr = 1.;
     let adiabatic = true;
     let aspect = 1.0;
@@ -34,8 +35,12 @@ fn main() {
     navier.solid = Some(mask);
     //navier.read("restart.h5");
     navier.write();
+    write_to_hdf5("data/solid.h5", "v", None, &navier.solid.as_ref().unwrap()).unwrap();
+    write_to_hdf5("data/solid.h5", "x", None, &navier.temp.x[0]).unwrap();
+    write_to_hdf5("data/solid.h5", "y", None, &navier.temp.x[1]).unwrap();
     // Solve
-    integrate(&mut navier, 50., Some(0.2));
+    integrate(&mut navier, 1., Some(0.2));
+
 
     // let (nx, ny) = (26, 26);
     // let mut navier_1 = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
