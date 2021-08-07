@@ -1,5 +1,5 @@
 //! Space initializes Field
-use crate::bases::{Mass, Size};
+use crate::bases::BaseBasics;
 use crate::{Base, Real};
 use ndarray::prelude::*;
 use ndarray::Ix;

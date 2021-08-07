@@ -256,11 +256,13 @@ dependencies = [
 
 [[package]]
 name = "funspace"
-version = "0.1.1"
+version = "0.1.3"
+source = "git+https://github.com/preiter93/funspace?branch=main#753de1ed5f0ce9332bbe23f120ca9ae1f6a6b7c1"
 dependencies = [
  "enum_dispatch",
  "ndarray",
  "ndrustfft",
+ "num-complex",
  "num-traits",
 ]
 
@@ -514,9 +516,9 @@ dependencies = [
 
 [[package]]
 name = "ndrustfft"
-version = "0.1.4"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad8803c821308bd27248e8510b7503d7f04b6ee19b987c686c8eaadd1e492823"
+checksum = "47cc3b53cbb1165999da03442375ca978da54098f558ed2a1fb48708c1f0c5b4"
 dependencies = [
  "ndarray",
  "num-traits",
@@ -761,9 +763,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.2.9"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ab49abadf3f9e1c4bc499e8845e152ad87d2ad2d30371841171169e9d75feee"
+checksum = "8383f39639269cde97d255a32bdb68c047337295414940c68bdd30c2e13203ff"
 dependencies = [
  "bitflags",
 ]
@@ -826,7 +828,7 @@ dependencies = [
 
 [[package]]
 name = "rustpde"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "criterion",
  "enum_dispatch",
@@ -834,6 +836,7 @@ dependencies = [
  "hdf5-interface",
  "ndarray",
  "ndarray-linalg",
+ "num-complex",
  "num-traits",
 ]
 

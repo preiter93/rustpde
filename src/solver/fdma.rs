@@ -168,7 +168,7 @@ where
             self.sweeped,
             "Fdma: Forward sweep must be performed for solve! Abort."
         );
-        output.assign(&input);
+        output.assign(input);
         Zip::from(output.lanes_mut(Axis(axis))).for_each(|mut out| {
             self.solve_lane(&mut out);
         });
@@ -229,7 +229,8 @@ impl<'a, T: SolverScalar + ScalarOperand> Mul<T> for &'a Fdma<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::{Array, Dim, Ix};
+    use ndarray::{Array1, Array2};
+    use num_complex::Complex;
 
     fn approx_eq<S, D>(result: &ArrayBase<S, D>, expected: &ArrayBase<S, D>)
     where
@@ -244,12 +245,26 @@ mod tests {
         }
     }
 
+    fn approx_eq_complex<S, D>(result: &ArrayBase<S, D>, expected: &ArrayBase<S, D>)
+    where
+        S: Data<Elem = Complex<f64>>,
+        D: Dimension,
+    {
+        let dif = 1e-3;
+        for (a, b) in expected.iter().zip(result.iter()) {
+            if (a.re - b.re).abs() > dif || (a.im - b.im).abs() > dif {
+                panic!("Large difference of values, got {} expected {}.", b, a)
+            }
+        }
+    }
+
     #[test]
     fn test_fdma_dim1() {
         let nx = 6;
-        let mut data = Array::<f64, Dim<[Ix; 1]>>::zeros(nx);
-        let mut result = Array::<f64, Dim<[Ix; 1]>>::zeros(nx);
-        let mut matrix = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, nx));
+        type Ty = f64;
+        let mut data = Array1::<Ty>::zeros(nx);
+        let mut result = Array1::<Ty>::zeros(nx);
+        let mut matrix = Array2::<Ty>::zeros((nx, nx));
         for (i, v) in data.iter_mut().enumerate() {
             *v = i as f64;
         }
@@ -268,7 +283,40 @@ mod tests {
         }
         let solver = Fdma::from_matrix(&matrix);
         solver.solve(&data, &mut result, 0);
-        let recover: Array<f64, Dim<[Ix; 1]>> = matrix.dot(&result);
+        let recover: Array1<Ty> = matrix.dot(&result);
         approx_eq(&recover, &data);
+    }
+
+    #[test]
+    fn test_fdma_dim1_complex() {
+        let nx = 6;
+        type Ty = Complex<f64>;
+        let mut data = Array1::<Ty>::zeros(nx);
+        let mut result = Array1::<Ty>::zeros(nx);
+        let mut matrix = Array2::<Ty>::zeros((nx, nx));
+        for (i, v) in data.iter_mut().enumerate() {
+            v.re = (i + 0) as f64;
+            v.im = (i + 1) as f64;
+        }
+        for i in 0..nx {
+            let j = (i + 1) as f64;
+            matrix[[i, i]].re = 0.5 * j;
+            matrix[[i, i]].im = 1.5 * j;
+            if i > 1 {
+                matrix[[i, i - 2]].re = 10. * j;
+                matrix[[i, i - 2]].im = 12. * j;
+            }
+            if i < nx - 2 {
+                matrix[[i, i + 2]].re = 1.5 * j;
+                matrix[[i, i + 2]].im = 4.5 * j;
+            }
+            if i < nx - 4 {
+                matrix[[i, i + 4]].re = 2.5 * j;
+            }
+        }
+        let solver = Fdma::from_matrix(&matrix);
+        solver.solve(&data, &mut result, 0);
+        let recover: Array1<Ty> = matrix.dot(&result);
+        approx_eq_complex(&recover, &data);
     }
 }
