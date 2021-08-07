@@ -96,16 +96,18 @@
 extern crate enum_dispatch;
 pub mod bases;
 pub mod field;
+pub mod field2;
 pub mod hdf5;
-pub mod integrate;
+// pub mod integrate;
 pub mod solver;
 pub mod space;
-pub use bases::{cheb_dirichlet, cheb_neumann, chebyshev};
+pub mod types;
+pub use bases::{cheb_dirichlet, cheb_neumann, chebyshev, fourier_c2c, fourier_r2c};
 pub use bases::{Base, Differentiate, Transform};
 pub use field::{Field, Field1, Field2};
-pub use integrate::{integrate, Integrate};
+// pub use integrate::{integrate, Integrate};
 pub use solver::{Solver, SolverField, SolverScalar};
 pub use space::{Space, Space1, Space2, Spaced};
 
-/// Real type
+/// Real type (not active)
 pub type Real = f64;

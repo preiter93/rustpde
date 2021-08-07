@@ -38,7 +38,7 @@ pub fn solid_cylinder_inner(
     radius: f64,
 ) -> Array2<f64> {
     let mut mask = Array2::<f64>::zeros((x.len(), y.len()));
-    let layer_thickness = radius/10.;
+    let layer_thickness = radius / 10.;
     for (i, xi) in x.iter().enumerate() {
         for (j, yi) in y.iter().enumerate() {
             let r = ((x0 - xi).powf(2.0) + (y0 - yi).powf(2.0)).sqrt();
@@ -46,7 +46,7 @@ pub fn solid_cylinder_inner(
                 mask[[i, j]] = 1.0;
             } else if r < radius + layer_thickness {
                 // Smoothin layer, see https://arxiv.org/pdf/1903.11914.pdf ( eq. 12 )
-                mask[[i, j]] = 0.5*(1. - (2.*(r-radius)/layer_thickness).tanh());
+                mask[[i, j]] = 0.5 * (1. - (2. * (r - radius) / layer_thickness).tanh());
             }
         }
     }

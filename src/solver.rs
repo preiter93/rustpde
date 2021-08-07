@@ -108,7 +108,6 @@ where
     }
 }
 
-#[macro_use]
 /// *a*: Variable Type of in- and output
 ///
 /// *t*: Variable Type in Solver

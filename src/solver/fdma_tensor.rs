@@ -8,8 +8,10 @@
 use super::utils::{diag, eig, inv};
 use super::Fdma;
 use super::Solve;
+use super::SolverScalar;
 use ndarray::{Array1, Array2, ArrayBase, Ix1, Ix2, Zip};
 use ndarray::{Data, DataMut};
+use std::ops::{Add, Div, Mul};
 
 /// Tensor solver handles non-seperable multidimensional
 /// systems, by diagonalizing all, but one, dimension
@@ -140,9 +142,18 @@ impl<const N: usize> FdmaTensor<f64, N> {
     }
 }
 
-impl Solve<f64, Ix1> for FdmaTensor<f64, 1> {
-    /// Solve 1-D Problem with real in and output
-    fn solve<S1: Data<Elem = f64>, S2: Data<Elem = f64> + DataMut>(
+impl<S> Solve<S, Ix1> for FdmaTensor<f64, 1>
+where
+    S: SolverScalar
+        + std::ops::Div<f64>
+        + std::ops::Mul<f64>
+        + std::ops::Add<f64>
+        + Div<f64, Output = S>
+        + Mul<f64, Output = S>
+        + Add<f64, Output = S>,
+{
+    /// Solve 1-D
+    fn solve<S1: Data<Elem = S>, S2: Data<Elem = S> + DataMut>(
         &self,
         input: &ArrayBase<S1, Ix1>,
         output: &mut ArrayBase<S2, Ix1>,
@@ -159,14 +170,22 @@ impl Solve<f64, Ix1> for FdmaTensor<f64, 1> {
     }
 }
 
-#[allow(unused_variables)]
-impl Solve<f64, Ix2> for FdmaTensor<f64, 2> {
+impl<S> Solve<S, Ix2> for FdmaTensor<f64, 2>
+where
+    S: SolverScalar
+        + std::ops::Div<f64>
+        + std::ops::Mul<f64>
+        + std::ops::Add<f64>
+        + Div<f64, Output = S>
+        + Mul<f64, Output = S>
+        + Add<f64, Output = S>,
+{
     /// Solve 2-D Problem with real in and output
-    fn solve<S1: Data<Elem = f64>, S2: Data<Elem = f64> + DataMut>(
+    fn solve<S1: Data<Elem = S>, S2: Data<Elem = S> + DataMut>(
         &self,
         input: &ArrayBase<S1, Ix2>,
         output: &mut ArrayBase<S2, Ix2>,
-        axis: usize,
+        _axis: usize,
     ) {
         if input.shape()[0] != self.lam[0].len() || input.shape()[1] != self.n {
             panic!(
@@ -180,13 +199,14 @@ impl Solve<f64, Ix2> for FdmaTensor<f64, 2> {
 
         // Step 1: Forward Transform rhs along x
         if let Some(p) = &self.fwd[0] {
-            output.assign(&p.dot(input));
+            let p_cast: Array2<S> = p.mapv(|x| x.into());
+            output.assign(&p_cast.dot(input));
         } else {
-            output.assign(&input);
+            output.assign(input);
         }
 
         // Step 2: Solve along y (but iterate over all lanes in x)
-        let mut helper = Array1::<f64>::zeros(output.shape()[1]);
+        let mut helper = Array1::<S>::zeros(output.shape()[1]);
         Zip::from(output.outer_iter_mut())
             .and(self.lam[0].outer_iter())
             .for_each(|mut out, lam| {
@@ -199,7 +219,8 @@ impl Solve<f64, Ix2> for FdmaTensor<f64, 2> {
 
         // Step 3: Backward Transform solution along x
         if let Some(q) = &self.bwd[0] {
-            output.assign(&q.dot(output));
+            let q_cast: Array2<S> = q.mapv(|x| x.into());
+            output.assign(&q_cast.dot(output));
         }
     }
 }
@@ -207,7 +228,9 @@ impl Solve<f64, Ix2> for FdmaTensor<f64, 2> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::{Array, Dim, Ix};
+    use ndarray::Dimension;
+    use ndarray::{Array1, Array2};
+    use num_complex::Complex;
 
     fn approx_eq<S, D>(result: &ArrayBase<S, D>, expected: &ArrayBase<S, D>)
     where
@@ -222,8 +245,21 @@ mod tests {
         }
     }
 
-    fn test_matrix(nx: usize) -> Array<f64, Dim<[Ix; 2]>> {
-        let mut matrix = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, nx));
+    fn approx_eq_complex<S, D>(result: &ArrayBase<S, D>, expected: &ArrayBase<S, D>)
+    where
+        S: Data<Elem = Complex<f64>>,
+        D: Dimension,
+    {
+        let dif = 1e-3;
+        for (a, b) in expected.iter().zip(result.iter()) {
+            if (a.re - b.re).abs() > dif || (a.im - b.im).abs() > dif {
+                panic!("Large difference of values, got {} expected {}.", b, a)
+            }
+        }
+    }
+
+    fn test_matrix(nx: usize) -> Array2<f64> {
+        let mut matrix = Array2::<f64>::zeros((nx, nx));
         for i in 0..nx {
             let j = (i + 1) as f64;
             matrix[[i, i]] = 0.5 * j;
@@ -242,25 +278,44 @@ mod tests {
 
     #[test]
     fn test_tensor1d() {
+        type Ty = f64;
         let nx = 6;
-        let mut data = Array::<f64, Dim<[Ix; 1]>>::zeros(nx);
-        let mut result = Array::<f64, Dim<[Ix; 1]>>::zeros(nx);
+        let mut data = Array1::<Ty>::zeros(nx);
+        let mut result = Array1::<Ty>::zeros(nx);
         for (i, v) in data.iter_mut().enumerate() {
             *v = i as f64;
         }
         let matrix = test_matrix(nx);
         let solver = FdmaTensor::from_matrix([&matrix], [&matrix], [&false]);
         solver.solve(&data, &mut result, 0);
-        let recover: Array<f64, Dim<[Ix; 1]>> = matrix.dot(&result);
+        let recover: Array1<f64> = matrix.dot(&result);
         approx_eq(&recover, &data);
     }
 
     #[test]
+    fn test_tensor1d_complex() {
+        type Ty = Complex<f64>;
+        let nx = 6;
+        let mut data = Array1::<Ty>::zeros(nx);
+        let mut result = Array1::<Ty>::zeros(nx);
+        for (i, v) in data.iter_mut().enumerate() {
+            v.re = (i + 0) as f64;
+            v.im = (i + 1) as f64;
+        }
+        let matrix = test_matrix(nx);
+        let solver = FdmaTensor::from_matrix([&matrix], [&matrix], [&false]);
+        solver.solve(&data, &mut result, 0);
+        let recover: Array1<Ty> = matrix.mapv(|x| Complex::new(x, 0.)).dot(&result);
+        approx_eq_complex(&recover, &data);
+    }
+
+    #[test]
     fn test_tensor2d() {
+        type Ty = f64;
         let nx = 6;
 
-        let mut data: Array2<f64> = Array2::zeros((6, 6));
-        let mut result = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, nx));
+        let mut data: Array2<Ty> = Array2::zeros((6, 6));
+        let mut result = Array2::<Ty>::zeros((nx, nx));
         for (i, v) in data.iter_mut().enumerate() {
             *v = i as f64;
         }
@@ -289,5 +344,45 @@ mod tests {
         let x = result.clone();
         let recover = a.dot(&x).dot(&(c.t())) + c.dot(&x).dot(&(a.t()));
         approx_eq(&recover, &data);
+    }
+
+    #[test]
+    fn test_tensor2d_complex() {
+        type Ty = Complex<f64>;
+        let nx = 6;
+
+        let mut data: Array2<Ty> = Array2::zeros((6, 6));
+        let mut result = Array2::<Ty>::zeros((nx, nx));
+        for (i, v) in data.iter_mut().enumerate() {
+            v.re = (i + 0) as f64;
+            v.im = (i + 1) as f64;
+        }
+        // Test arrays
+        let a = ndarray::array![
+            [-1.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, -1.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, -1.0, 0.0, 1.0],
+            [0.0, 0.0, 0.0, 0.0, -1.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
+        ];
+        let c = ndarray::array![
+            [0.41666, 0.0, -0.2083, 0.0, 0.041666, 0.0],
+            [0.0, 0.104166, 0.0, -0.0833, 0.0, 0.0208],
+            [-0.0208, 0.0, 0.0542, 0.0, -0.0333, 0.0],
+            [0.0, -0.0125, 0.0, 0.033333, 0.0, -0.020833],
+            [0.0, 0.0, -0.00833, 0.0, 0.00833, 0.0],
+            [0.0, 0.0, 0.0, -0.00595, 0.0, 0.00595]
+        ];
+        let ac = a.mapv(|x| Complex::new(x, 0.));
+        let cc = c.mapv(|x| Complex::new(x, 0.));
+
+        let solver = FdmaTensor::from_matrix([&a, &a], [&c, &c], [&false, &false]);
+        solver.solve(&data, &mut result, 0);
+
+        // Recover b
+        let x = result.clone();
+        let recover = ac.dot(&x).dot(&(cc.t())) + cc.dot(&x).dot(&(ac.t()));
+        approx_eq_complex(&recover, &data);
     }
 }

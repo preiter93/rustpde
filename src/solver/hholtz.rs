@@ -18,9 +18,8 @@
 //! of D2 (B2). In this case, the second equation is
 //! solved, with A = B2.
 use super::{MatVec, Solver, SolverScalar};
-use crate::field::Field;
+use crate::field2::SpaceBase;
 use crate::solver::{Solve, SolveReturn};
-use crate::space::Spaced;
 use crate::Base;
 use ndarray::prelude::*;
 use ndarray::{Data, DataMut};
@@ -35,33 +34,30 @@ pub struct Hholtz<T, const N: usize>
     matvec: Vec<Option<MatVec<T>>>,
 }
 
-impl<T, const N: usize> Hholtz<T, N>
-where
-    T: SolverScalar + ndarray::ScalarOperand,
-    f64: Into<T>,
+impl<const N: usize> Hholtz<f64, N>
+// where
+//     T: SolverScalar + ndarray::ScalarOperand,
+//     f64: Into<T>,
 {
-    /// Construct Helmholtz solver from field
-    pub fn from_field<S>(field: &Field<S, T, N>, c: [f64; N]) -> Self
-    where
-        S: Spaced<T, N>,
-    {
-        Self::from_space(&field.space, c)
-    }
+    // /// Construct Helmholtz solver from field
+    // pub fn from_field<S>(field: &Field<S, T, N>, c: [f64; N]) -> Self
+    // where
+    //     S: Spaced<T, N>,
+    // {
+    //     Self::from_space(&field.space, c)
+    // }
 
     /// Construct Helmholtz solver from space
-    pub fn from_space<S>(space: &S, c: [f64; N]) -> Self
-    where
-        S: Spaced<T, N>,
-    {
-        let solver: Vec<Solver<T>> = space
-            .get_bases()
+    pub fn from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Self {
+        let solver: Vec<Solver<f64>> = space
+            .bases
             .iter()
             .enumerate()
             .map(|(i, base)| Self::solver_from_base(base, c[i]))
             .collect();
 
-        let matvec: Vec<Option<MatVec<T>>> = space
-            .get_bases()
+        let matvec: Vec<Option<MatVec<f64>>> = space
+            .bases
             .iter()
             .map(|base| Self::matvec_from_base(base))
             .collect();
@@ -70,39 +66,47 @@ where
     }
 
     /// Returns the solver for the lhs, depending on the base
-    fn solver_from_base(base: &Base<f64>, c: f64) -> Solver<T> {
+    fn solver_from_base(base: &Base<f64>, c: f64) -> Solver<f64> {
+        use crate::bases::BaseBasics;
         use crate::bases::LaplacianInverse;
-        use crate::bases::Mass;
         let mass = base.mass();
+        let lap = base.laplace();
+        let pinv = base.laplace_inv();
+        let eye = base.laplace_inv_eye();
         match base {
-            Base::Chebyshev(ref b) => {
-                let pinv = b.laplace_inv();
-                let eye = b.laplace_inv_eye();
+            Base::Chebyshev(_) => {
                 let mat = eye.dot(&pinv).dot(&mass.slice(ndarray::s![.., 2..]))
                     - eye.dot(&mass.slice(ndarray::s![.., 2..])) * c;
                 let mat = mat.mapv(std::convert::Into::into);
                 Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
             }
-            Base::CompositeChebyshev(ref b) => {
-                let pinv = b.laplace_inv();
-                let eye = b.laplace_inv_eye();
+            Base::CompositeChebyshev(_) => {
                 let mat = eye.dot(&pinv).dot(&mass) - eye.dot(&mass) * c;
                 let mat = mat.mapv(std::convert::Into::into);
                 Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
-            } //_ => todo!(),
+            }
+            Base::FourierC2c(_) | Base::FourierR2c(_) => {
+                let mat = 1. - lap;
+                Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
+            }
         }
     }
 
     /// Returns the solver for the rhs, depending on the base
     #[allow(clippy::unnecessary_wraps)]
-    fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<T>> {
+    fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<f64>> {
         use crate::bases::LaplacianInverse;
         use crate::solver::MatVecDot;
-        let pinv = base.laplace_inv();
-        let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
-        let mat = mat.mapv(std::convert::Into::into);
-        let matvec = MatVec::MatVecDot(MatVecDot::new(&mat));
-        Some(matvec)
+        match base {
+            Base::Chebyshev(_) | Base::CompositeChebyshev(_) => {
+                let pinv = base.laplace_inv();
+                let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
+                let mat = mat.mapv(std::convert::Into::into);
+                let matvec = MatVec::MatVecDot(MatVecDot::new(&mat));
+                Some(matvec)
+            }
+            Base::FourierC2c(_) | Base::FourierR2c(_) => None,
+        }
     }
 }
 
@@ -127,7 +131,7 @@ where
         S2: Data<Elem = A> + DataMut,
     {
         if let Some(matvec) = &self.matvec[0] {
-            let buffer = matvec.solve(&input, 0);
+            let buffer = matvec.solve(input, 0);
             self.solver[0].solve(&buffer, output, 0);
         } else {
             self.solver[0].solve(input, output, 0);
@@ -158,7 +162,7 @@ where
         // Matvec
         let mut rhs = self.matvec[0]
             .as_ref()
-            .map_or_else(|| input.to_owned(), |x| x.solve(&input, 0));
+            .map_or_else(|| input.to_owned(), |x| x.solve(input, 0));
         if let Some(x) = &self.matvec[1] {
             rhs = x.solve(&rhs, 1);
         }
@@ -172,11 +176,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cheb_dirichlet;
+    use crate::{cheb_dirichlet, fourier_r2c};
     //use crate::cheb_neumann;
-    use crate::{Field1, Space1};
-    use crate::{Field2, Space2};
+    use crate::bases::BaseBasics;
+    use crate::field2::{Field, Field1, Field2, Field2Complex};
     use ndarray::array;
+    use num_complex::Complex;
     //use std::f64::consts::PI;
 
     fn approx_eq<S, D>(result: &ndarray::ArrayBase<S, D>, expected: &ndarray::ArrayBase<S, D>)
@@ -192,12 +197,25 @@ mod tests {
         }
     }
 
+    fn approx_eq_complex<S, D>(result: &ArrayBase<S, D>, expected: &ArrayBase<S, D>)
+    where
+        S: ndarray::Data<Elem = Complex<f64>>,
+        D: ndarray::Dimension,
+    {
+        let dif = 1e-3;
+        for (a, b) in expected.iter().zip(result.iter()) {
+            if (a.re - b.re).abs() > dif || (a.im - b.im).abs() > dif {
+                panic!("Large difference of values, got {} expected {}.", b, a)
+            }
+        }
+    }
+
     #[test]
     fn test_hholtz() {
         let nx = 7;
         let bases = [cheb_dirichlet(nx)];
-        let field = Field1::new(Space1::new(bases));
-        let hholtz = Hholtz::from_field(&field, [1.0]);
+        let field = Field1::new(&bases);
+        let hholtz = Hholtz::from_space(&field.space, [1.0]);
         let b: Array1<f64> = array![1., 2., 3., 4., 5., 6., 7.];
         let mut x = Array1::<f64>::zeros(nx - 2);
         // Solve Hholtz
@@ -218,8 +236,8 @@ mod tests {
     fn test_hholtz2d() {
         let nx = 7;
         let bases = [cheb_dirichlet(nx), cheb_dirichlet(nx)];
-        let field = Field2::new(Space2::new(bases));
-        let hholtz = Hholtz::from_field(&field, [1.0, 1.0]);
+        let field = Field2::new(&bases);
+        let hholtz = Hholtz::from_space(&field.space, [1.0, 1.0]);
         let b: Array2<f64> = array![
             [1., 2., 3., 4., 5., 6., 7.],
             [1., 2., 3., 4., 5., 6., 7.],
@@ -244,5 +262,37 @@ mod tests {
 
         // Assert
         approx_eq(&x, &y);
+    }
+
+    #[test]
+    fn test_hholtz2d_fo_cd() {
+        // Init
+        let (nx, ny) = (16, 7);
+        let bases = [fourier_r2c::<f64>(nx), cheb_dirichlet::<f64>(ny)];
+        let mut field = Field2Complex::new(&bases);
+        let poisson = Hholtz::from_space(&field.space, [1.0, 1.0]);
+        let x = bases[0].coords();
+        let y = bases[1].coords();
+
+        // Analytical field and solution
+        let n = std::f64::consts::PI / 2.;
+        let mut expected = field.v.clone();
+        for (i, xi) in x.iter().enumerate() {
+            for (j, yi) in y.iter().enumerate() {
+                field.v[[i, j]] = (xi).cos() * (n * yi).cos();
+                expected[[i, j]] = -1. / (1. + n * n) * field.v[[i, j]];
+            }
+        }
+
+        // Solve
+        field.forward();
+        let input = field.to_ortho();
+        let mut result = Array2::<Complex<f64>>::zeros(field.vhat.raw_dim());
+        poisson.solve(&input, &mut result, 0);
+        field.vhat.assign(&result);
+        field.backward();
+
+        // Compare
+        approx_eq(&field.v, &expected);
     }
 }

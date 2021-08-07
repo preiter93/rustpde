@@ -131,7 +131,7 @@ impl<S: Spaced<f64, 1>> Field<S, Real, 1> {
     /// Transform to child space
     pub fn from_parent(&mut self, input: &Array1<f64>) {
         self.vhat
-            .assign(&self.space.get_bases()[0].from_ortho(input, 0))
+            .assign(&self.space.get_bases()[0].from_ortho(input, 0));
     }
 
     /// Gradient
@@ -182,3 +182,41 @@ impl<S: Spaced<f64, 2>> Field<S, Real, 2> {
         output
     }
 }
+
+// impl<S: Spaced<Complex<f64>, 2>> Field<S, Complex<f64>, 2> {
+//     /// Forward transform 2d
+//     pub fn forward(&mut self) {
+//         let mut buffer = self.space.get_bases_mut()[1].forward_par(&mut self.v, 1);
+//         self.space.get_bases_mut()[0].forward_inplace_par(&mut buffer, &mut self.vhat, 0);
+//     }
+//     /// Backward transform 2d
+//     pub fn backward(&mut self) {
+//         let mut buffer = self.space.get_bases_mut()[0].backward_par(&mut self.vhat, 0);
+//         self.space.get_bases_mut()[1].backward_inplace_par(&mut buffer, &mut self.v, 1);
+//     }
+
+//     /// Transform to parent space
+//     pub fn to_parent(&self) -> Array2<Complex<f64>> {
+//         let axis0 = self.space.get_bases()[0].to_ortho(&self.vhat, 0);
+//         self.space.get_bases()[1].to_ortho(&axis0, 1)
+//     }
+
+//     /// Transform to child space
+//     pub fn from_parent(&mut self, input: &Array2<f64>) {
+//         let axis0 = self.space.get_bases()[0].from_ortho(input, 0);
+//         self.vhat
+//             .assign(&self.space.get_bases()[1].from_ortho(&axis0, 1));
+//     }
+
+//     /// Gradient
+//     #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+//     pub fn grad(&self, deriv: [usize; 2], scale: Option<[f64; 2]>) -> Array2<Complex<f64>> {
+//         let buffer = self.space.get_bases()[0].differentiate(&self.vhat, deriv[0], 0);
+//         let mut output = self.space.get_bases()[1].differentiate(&buffer, deriv[1], 1);
+//         if let Some(s) = scale {
+//             output /= s[0].powi(deriv[0] as i32);
+//             output /= s[1].powi(deriv[1] as i32);
+//         }
+//         output
+//     }
+// }
