@@ -6,9 +6,8 @@
 //! # Example
 //! Find steady state solution of large scale circulation
 //! ```ignore
-//! use rustpde::integrate;
-//! use rustpde::integrate::Navier2DAdjoint;
-//! use rustpde::Integrate;
+//! use rustpde::{Integrate, integrate};
+//! use rustpde::examples::Navier2DAdjoint;
 //!
 //! fn main() {
 //!     // Parameters
@@ -38,12 +37,11 @@
 use super::conv_term;
 use super::navier::{apply_cos_sin, apply_sin_cos};
 use super::navier::{get_ka, get_nu, Navier2D};
-use super::Integrate;
 use crate::bases::{cheb_dirichlet, cheb_neumann, chebyshev};
 use crate::hdf5::{read_scalar_from_hdf5, write_scalar_to_hdf5};
 use crate::solver::{Poisson, Solve, SolverField};
-use crate::Field2;
-use crate::Space2;
+use crate::Integrate;
+use crate::{Field, Field2, ReadField, WriteField};
 use ndarray::Array2;
 use std::collections::HashMap;
 
@@ -114,22 +112,22 @@ impl Navier2DAdjoint {
         let nu = get_nu(ra, pr, scale[1] * 2.0);
         let ka = get_ka(ra, pr, scale[1] * 2.0);
         let ux = [
-            Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)])),
-            Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)])),
+            Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)]),
+            Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)]),
         ];
         let uy = [
-            Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)])),
-            Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)])),
+            Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)]),
+            Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)]),
         ];
         let temp = if adiabatic {
             [
-                Field2::new(Space2::new([cheb_neumann(nx), cheb_dirichlet(ny)])),
-                Field2::new(Space2::new([cheb_neumann(nx), cheb_dirichlet(ny)])),
+                Field2::new(&[cheb_neumann(nx), cheb_dirichlet(ny)]),
+                Field2::new(&[cheb_neumann(nx), cheb_dirichlet(ny)]),
             ]
         } else {
             [
-                Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)])),
-                Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)])),
+                Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)]),
+                Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)]),
             ]
         };
         // define underlying naver-stokes solver
@@ -154,26 +152,26 @@ impl Navier2DAdjoint {
         // define additional fields
         let nx = temp[0].v.shape()[0];
         let ny = temp[0].v.shape()[1];
-        let field = Field2::new(Space2::new([chebyshev(nx), chebyshev(ny)]));
+        let field = Field2::new(&[chebyshev(nx), chebyshev(ny)]);
         let pres = [
-            Field2::new(Space2::new([chebyshev(nx), chebyshev(ny)])),
-            Field2::new(Space2::new([cheb_neumann(nx), cheb_neumann(ny)])),
+            Field2::new(&[chebyshev(nx), chebyshev(ny)]),
+            Field2::new(&[cheb_neumann(nx), cheb_neumann(ny)]),
         ];
         // define solver
-        let smooth_ux = SolverField::Poisson(Poisson::from_field(
-            &ux[0],
+        let smooth_ux = SolverField::Poisson(Poisson::from_space(
+            &ux[0].space,
             [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
         ));
-        let smooth_uy = SolverField::Poisson(Poisson::from_field(
-            &uy[0],
+        let smooth_uy = SolverField::Poisson(Poisson::from_space(
+            &uy[0].space,
             [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
         ));
-        let smooth_temp = SolverField::Poisson(Poisson::from_field(
-            &temp[0],
+        let smooth_temp = SolverField::Poisson(Poisson::from_space(
+            &temp[0].space,
             [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
         ));
-        let solver_pres = SolverField::Poisson(Poisson::from_field(
-            &pres[1],
+        let solver_pres = SolverField::Poisson(Poisson::from_space(
+            &pres[1].space,
             [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
         ));
         let smoother = [smooth_ux, smooth_uy, smooth_temp];
@@ -323,7 +321,7 @@ impl Navier2DAdjoint {
     fn solve_ux(&mut self, ux: &Array2<f64>, uy: &Array2<f64>, temp: &Array2<f64>) {
         self.zero_rhs();
         // + old field
-        self.rhs += &self.ux[0].to_parent();
+        self.rhs += &self.ux[0].to_ortho();
         // + pres
         self.rhs -= &(self.dt * self.pres[0].grad([1, 0], Some(self.scale)));
         // + convection
@@ -333,14 +331,14 @@ impl Navier2DAdjoint {
         let nu = self.nu / self.scale_adjoint;
         self.rhs += &(self.dt * nu * &self.fields_unsmoothed[0]);
         // update ux
-        self.ux[0].from_parent(&self.rhs);
+        self.ux[0].from_ortho(&self.rhs);
     }
 
     /// Solve adjoint vertical momentum equation
     fn solve_uy(&mut self, ux: &Array2<f64>, uy: &Array2<f64>, temp: &Array2<f64>) {
         self.zero_rhs();
         // + old field
-        self.rhs += &self.uy[0].to_parent();
+        self.rhs += &self.uy[0].to_ortho();
         // + pres
         self.rhs -= &(self.dt * self.pres[0].grad([0, 1], Some(self.scale)));
         // + convection
@@ -350,25 +348,25 @@ impl Navier2DAdjoint {
         let nu = self.nu / self.scale_adjoint;
         self.rhs += &(self.dt * nu * &self.fields_unsmoothed[1]);
         // update uy
-        self.uy[0].from_parent(&self.rhs);
+        self.uy[0].from_ortho(&self.rhs);
     }
 
     /// Solve adjoint temperature equation
     fn solve_temp(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) {
         self.zero_rhs();
         // + old field
-        self.rhs += &self.temp[0].to_parent();
+        self.rhs += &self.temp[0].to_ortho();
         // + convection
         let conv = self.conv_temp(ux, uy);
         self.rhs += &(self.dt * conv);
         // + buoyancy (adjoint)
-        let buoy = self.uy[1].to_parent();
+        let buoy = self.uy[1].to_ortho();
         self.rhs += &(self.dt * buoy);
         // + diffusion
         let ka = self.ka / self.scale_adjoint;
         self.rhs += &(self.dt * ka * &self.fields_unsmoothed[2]);
         // update temp
-        self.temp[0].from_parent(&self.rhs);
+        self.temp[0].from_ortho(&self.rhs);
     }
 
     /// Solve pressure poisson equation
@@ -384,7 +382,7 @@ impl Navier2DAdjoint {
 
     fn update_pres(&mut self, _div: &Array2<f64>) {
         //self.pres[0].vhat -= &(self.nu * div);
-        self.pres[0].vhat += &(&self.pres[1].to_parent() / self.dt);
+        self.pres[0].vhat += &(&self.pres[1].to_ortho() / self.dt);
     }
 
     /// Correct velocity field.
@@ -398,8 +396,8 @@ impl Navier2DAdjoint {
         let dpdy = self.pres[1].grad([0, 1], Some(self.scale));
         let old_ux = self.ux[0].vhat.clone();
         let old_uy = self.uy[0].vhat.clone();
-        self.ux[0].from_parent(&dpdx);
-        self.uy[0].from_parent(&dpdy);
+        self.ux[0].from_ortho(&dpdx);
+        self.uy[0].from_ortho(&dpdy);
         self.ux[0].vhat *= -c;
         self.uy[0].vhat *= -c;
         self.ux[0].vhat += &old_ux;
@@ -428,9 +426,9 @@ impl Navier2DAdjoint {
         let res = (&self.navier.temp.vhat - &self.temp[0].vhat) / self.dt;
         self.navier.temp.vhat.assign(&res);
         // Save unsmoothed fields for diffusion
-        self.fields_unsmoothed[0].assign(&self.navier.ux.to_parent());
-        self.fields_unsmoothed[1].assign(&self.navier.uy.to_parent());
-        self.fields_unsmoothed[2].assign(&self.navier.temp.to_parent());
+        self.fields_unsmoothed[0].assign(&self.navier.ux.to_ortho());
+        self.fields_unsmoothed[1].assign(&self.navier.uy.to_ortho());
+        self.fields_unsmoothed[2].assign(&self.navier.temp.to_ortho());
         // Smooth fields
         self.smoother[0].solve(&self.fields_unsmoothed[0], &mut self.ux[1].vhat, 0);
         self.smoother[1].solve(&self.fields_unsmoothed[1], &mut self.uy[1].vhat, 0);
@@ -558,7 +556,7 @@ impl Integrate for Navier2DAdjoint {
 }
 
 fn norm_l2(array: &Array2<f64>) -> f64 {
-    array.iter().map(|x| x.powf(2.0)).sum::<f64>().sqrt()
+    array.iter().map(|x| x.powi(2)).sum::<f64>().sqrt()
 }
 
 impl Navier2DAdjoint {

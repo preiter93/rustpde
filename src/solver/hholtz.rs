@@ -10,15 +10,19 @@
 //!  (I-c*D2) vhat = A f
 //!
 //! For multidimensional equations, apply
-//! the alternating-direction implicit method (ADI)
-//! to solve each dimension individually.
+//! alternating-direction implicit method (ADI)
+//! to solve each dimension individually. But take
+//! in mind that this method introduces a numerical
+//! error, which is large if *c* is large.
 //!
 //! Chebyshev bases: The equation becomes
 //! banded after multiplication with the pseudoinverse
 //! of D2 (B2). In this case, the second equation is
 //! solved, with A = B2.
 use super::{MatVec, Solver, SolverScalar};
-use crate::field2::SpaceBase;
+use crate::bases::BaseBasics;
+use crate::bases::LaplacianInverse;
+use crate::bases::SpaceBase;
 use crate::solver::{Solve, SolveReturn};
 use crate::Base;
 use ndarray::prelude::*;
@@ -67,41 +71,32 @@ impl<const N: usize> Hholtz<f64, N>
 
     /// Returns the solver for the lhs, depending on the base
     fn solver_from_base(base: &Base<f64>, c: f64) -> Solver<f64> {
-        use crate::bases::BaseBasics;
-        use crate::bases::LaplacianInverse;
         let mass = base.mass();
         let lap = base.laplace();
-        let pinv = base.laplace_inv();
-        let eye = base.laplace_inv_eye();
-        match base {
+        let peye = base.laplace_inv_eye();
+        let pinv = peye.dot(&base.laplace_inv());
+
+        let mat = match base {
             Base::Chebyshev(_) => {
-                let mat = eye.dot(&pinv).dot(&mass.slice(ndarray::s![.., 2..]))
-                    - eye.dot(&mass.slice(ndarray::s![.., 2..])) * c;
-                let mat = mat.mapv(std::convert::Into::into);
-                Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
+                let mass_sliced = mass.slice(s![.., 2..]);
+                pinv.dot(&mass_sliced) - peye.dot(&mass_sliced) * c
             }
-            Base::CompositeChebyshev(_) => {
-                let mat = eye.dot(&pinv).dot(&mass) - eye.dot(&mass) * c;
-                let mat = mat.mapv(std::convert::Into::into);
-                Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
-            }
-            Base::FourierC2c(_) | Base::FourierR2c(_) => {
-                let mat = 1. - lap;
-                Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
-            }
-        }
+            Base::CompositeChebyshev(_) => pinv.dot(&mass) - peye.dot(&mass) * c,
+            Base::FourierC2c(_) | Base::FourierR2c(_) => mass - lap * c,
+        };
+        Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
     }
 
     /// Returns the solver for the rhs, depending on the base
     #[allow(clippy::unnecessary_wraps)]
     fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<f64>> {
-        use crate::bases::LaplacianInverse;
         use crate::solver::MatVecDot;
         match base {
             Base::Chebyshev(_) | Base::CompositeChebyshev(_) => {
+                let peye = base.laplace_inv_eye();
                 let pinv = base.laplace_inv();
-                let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
-                let mat = mat.mapv(std::convert::Into::into);
+                //let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
+                let mat = peye.dot(&pinv);
                 let matvec = MatVec::MatVecDot(MatVecDot::new(&mat));
                 Some(matvec)
             }
@@ -176,13 +171,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{cheb_dirichlet, fourier_r2c};
-    //use crate::cheb_neumann;
     use crate::bases::BaseBasics;
-    use crate::field2::{Field, Field1, Field2, Field2Complex};
+    use crate::field::{Field, Field1, Field2, Field2Complex};
+    use crate::{cheb_dirichlet, fourier_r2c};
     use ndarray::array;
-    use num_complex::Complex;
-    //use std::f64::consts::PI;
 
     fn approx_eq<S, D>(result: &ndarray::ArrayBase<S, D>, expected: &ndarray::ArrayBase<S, D>)
     where
@@ -192,19 +184,6 @@ mod tests {
         let dif = 1e-3;
         for (a, b) in expected.iter().zip(result.iter()) {
             if (a - b).abs() > dif {
-                panic!("Large difference of values, got {} expected {}.", b, a)
-            }
-        }
-    }
-
-    fn approx_eq_complex<S, D>(result: &ArrayBase<S, D>, expected: &ArrayBase<S, D>)
-    where
-        S: ndarray::Data<Elem = Complex<f64>>,
-        D: ndarray::Dimension,
-    {
-        let dif = 1e-3;
-        for (a, b) in expected.iter().zip(result.iter()) {
-            if (a.re - b.re).abs() > dif || (a.im - b.im).abs() > dif {
                 panic!("Large difference of values, got {} expected {}.", b, a)
             }
         }
@@ -265,12 +244,13 @@ mod tests {
     }
 
     #[test]
-    fn test_hholtz2d_fo_cd() {
+    fn test_hholtz2d_cd_cd() {
         // Init
         let (nx, ny) = (16, 7);
-        let bases = [fourier_r2c::<f64>(nx), cheb_dirichlet::<f64>(ny)];
-        let mut field = Field2Complex::new(&bases);
-        let poisson = Hholtz::from_space(&field.space, [1.0, 1.0]);
+        let bases = [cheb_dirichlet::<f64>(nx), cheb_dirichlet::<f64>(ny)];
+        let mut field = Field2::new(&bases);
+        let alpha = 1e-5;
+        let hholtz = Hholtz::from_space(&field.space, [alpha, alpha]);
         let x = bases[0].coords();
         let y = bases[1].coords();
 
@@ -279,17 +259,46 @@ mod tests {
         let mut expected = field.v.clone();
         for (i, xi) in x.iter().enumerate() {
             for (j, yi) in y.iter().enumerate() {
-                field.v[[i, j]] = (xi).cos() * (n * yi).cos();
-                expected[[i, j]] = -1. / (1. + n * n) * field.v[[i, j]];
+                field.v[[i, j]] = (n * xi).cos() * (n * yi).cos();
+                expected[[i, j]] = 1. / (1. + alpha * n * n * 2.) * field.v[[i, j]];
             }
         }
 
         // Solve
         field.forward();
-        let input = field.to_ortho();
-        let mut result = Array2::<Complex<f64>>::zeros(field.vhat.raw_dim());
-        poisson.solve(&input, &mut result, 0);
-        field.vhat.assign(&result);
+        hholtz.solve(&field.to_ortho(), &mut field.vhat, 0);
+        //field.vhat.assign(&result);
+        field.backward();
+
+        // Compare
+        approx_eq(&field.v, &expected);
+    }
+
+    #[test]
+    fn test_hholtz2d_fo_cd() {
+        // Init
+        let (nx, ny) = (16, 7);
+        let bases = [fourier_r2c::<f64>(nx), cheb_dirichlet::<f64>(ny)];
+        let mut field = Field2Complex::new(&bases);
+        let alpha = 1e-5;
+        let hholtz = Hholtz::from_space(&field.space, [alpha, alpha]);
+        let x = bases[0].coords();
+        let y = bases[1].coords();
+
+        // Analytical field and solution
+        let n = std::f64::consts::PI / 2.;
+        let mut expected = field.v.clone();
+        for (i, xi) in x.iter().enumerate() {
+            for (j, yi) in y.iter().enumerate() {
+                field.v[[i, j]] = xi.cos() * (n * yi).cos();
+                expected[[i, j]] = 1. / (1. + alpha * n * n + alpha) * field.v[[i, j]];
+            }
+        }
+
+        // Solve
+        field.forward();
+        hholtz.solve(&field.to_ortho(), &mut field.vhat, 0);
+        //field.vhat.assign(&result);
         field.backward();
 
         // Compare

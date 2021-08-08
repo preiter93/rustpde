@@ -14,6 +14,7 @@ pub use fdma_tensor::FdmaTensor;
 pub use hholtz::Hholtz;
 pub use matvec::{MatVec, MatVecDot};
 use ndarray::{Array, ArrayBase, Data, DataMut};
+use num_complex::Complex;
 pub use poisson::Poisson;
 pub use tdma::Tdma;
 use utils::diag;
@@ -57,7 +58,7 @@ pub trait Solve<A, D> {
         S2: Data<Elem = A> + DataMut;
 }
 
-/// Solve linear algebraix systems of the form: M x = b.
+/// Solve linear algebraic systems of the form: M x = b.
 #[enum_dispatch]
 pub trait SolveReturn<A, D> {
     /// Solves M x = b, returns x, which is of type A
@@ -142,3 +143,5 @@ macro_rules! derive_solver_enum {
 // derive_solver_enum!(SolverPoisson, f64, f64, ndarray::Ix2, 2);
 derive_solver_enum!(SolverField, f64, f64, ndarray::Ix1, 1);
 derive_solver_enum!(SolverField, f64, f64, ndarray::Ix2, 2);
+derive_solver_enum!(SolverField, Complex<f64>, f64, ndarray::Ix1, 1);
+derive_solver_enum!(SolverField, Complex<f64>, f64, ndarray::Ix2, 2);

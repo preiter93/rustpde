@@ -24,7 +24,7 @@ use super::utils::vec_to_array;
 use super::{FdmaTensor, MatVec};
 use crate::bases::BaseBasics;
 use crate::bases::LaplacianInverse;
-use crate::field2::SpaceBase;
+use crate::bases::SpaceBase;
 use crate::solver::{Solve, SolveReturn};
 use crate::Base;
 use crate::SolverScalar;
@@ -108,7 +108,7 @@ impl<const N: usize> Poisson<f64, N> {
     /// Returns the solver for the lhs, depending on the base
     fn matrix_from_base(base: &Base<f64>, c: f64) -> (Array2<f64>, Array2<f64>) {
         let mass = base.mass();
-        let mut lap = base.laplace();
+        let lap = base.laplace();
         let pinv = base.laplace_inv();
         let eye = base.laplace_inv_eye();
         let c_t: f64 = c;
@@ -119,8 +119,8 @@ impl<const N: usize> Poisson<f64, N> {
             ),
             Base::CompositeChebyshev(_) => (eye.dot(&mass) * c_t, (eye.dot(&pinv)).dot(&mass)),
             Base::FourierC2c(_) | Base::FourierR2c(_) => {
-                println!("Not to me: Manipulate Laplacian in Poisson. Find better solution!!");
-                lap[[0, 0]] = 1e-10;
+                // println!("Not to me: Manipulate Laplacian in Poisson. Find better solution!!");
+                // lap[[0, 0]] = 1e-10;
                 (lap * c_t, mass)
             }
         }
@@ -204,7 +204,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field2::{Field, Field1, Field2, Field2Complex};
+    use crate::field::{Field, Field1, Field2, Field2Complex};
     use crate::{cheb_dirichlet, fourier_r2c};
     use ndarray::array;
     use num_complex::Complex;

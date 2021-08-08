@@ -1,9 +1,10 @@
 //! # Diffusion equation
 #![allow(dead_code)]
-use super::Integrate;
 use crate::solver::{Hholtz, Solve, SolverField};
-use crate::{Field1, Field2};
+use crate::Integrate;
+use crate::{Field, Field1, Field1Complex, Field2, WriteField};
 use ndarray::{Array1, Array2};
+use num_complex::Complex;
 
 /// Solve 1-dimensional diffusion equation.
 ///
@@ -17,9 +18,8 @@ use ndarray::{Array1, Array2};
 ///
 ///```
 /// use rustpde::*;
-/// use rustpde::integrate::diffusion::Diffusion1D;
-/// let bases = [cheb_dirichlet(7)];
-/// let mut field = Field::new(Space1::new(bases));
+/// use rustpde::examples::diffusion::Diffusion1D;
+/// let mut field = Field1::new(&[cheb_dirichlet(7)]);
 /// let mut diff = Diffusion1D::new(field, 1.0, 0.1);
 /// diff.impulse();
 /// diff.update();
@@ -36,7 +36,7 @@ pub struct Diffusion1D {
 impl Diffusion1D {
     /// Create new instance
     pub fn new(field: Field1, kappa: f64, dt: f64) -> Self {
-        let solver = SolverField::Hholtz(Hholtz::from_field(&field, [dt * kappa]));
+        let solver = SolverField::Hholtz(Hholtz::from_space(&field.space, [dt * kappa]));
         Diffusion1D {
             field,
             solver,
@@ -67,7 +67,7 @@ impl Diffusion1D {
 impl Integrate for Diffusion1D {
     fn update(&mut self) {
         // rhs: uold -> parent space
-        self.field.v.assign(&self.field.to_parent());
+        self.field.v.assign(&self.field.to_ortho());
         // add forcing
         if let Some(x) = &self.force {
             self.field.v = &self.field.v + &(self.dt * x);
@@ -98,6 +98,92 @@ impl Integrate for Diffusion1D {
     }
 }
 
+/// Diffusion equation for Complex spectral space
+///```
+/// use rustpde::*;
+/// use rustpde::examples::diffusion::Diffusion1DComplex;
+/// let mut field = Field1Complex::new(&[fourier_r2c(7)]);
+/// let mut diff = Diffusion1DComplex::new(field, 1.0, 0.1);
+/// diff.impulse();
+/// diff.update();
+/// diff.write();
+///```
+pub struct Diffusion1DComplex {
+    field: Field1Complex,
+    solver: SolverField<f64, 1>,
+    force: Option<Array1<Complex<f64>>>,
+    time: f64,
+    dt: f64,
+    rhs: Array1<Complex<f64>>,
+}
+
+impl Diffusion1DComplex {
+    /// Create new instance
+    pub fn new(field: Field1Complex, kappa: f64, dt: f64) -> Self {
+        let solver = SolverField::Hholtz(Hholtz::from_space(&field.space, [dt * kappa]));
+        let rhs = Array1::<Complex<f64>>::zeros(field.vhat.raw_dim());
+        Self {
+            field,
+            solver,
+            force: None,
+            time: 0.0,
+            dt,
+            rhs,
+        }
+    }
+
+    /// Apply impulse
+    pub fn impulse(&mut self) {
+        let n = self.field.v.shape()[0] as usize;
+        self.field.v.assign(&Array1::zeros(n));
+        self.field.v[n / 2] = 1.;
+        self.field.forward();
+        self.field.backward();
+    }
+
+    /// Add constant force
+    /// ## Panics
+    /// Panics when shapes of fields do not match.
+    pub fn add_force(&mut self, force: &Array1<Complex<f64>>) {
+        assert!(force.len() == self.field.v.len());
+        self.force = Some(force.to_owned());
+    }
+}
+
+impl Integrate for Diffusion1DComplex {
+    fn update(&mut self) {
+        // rhs: uold -> parent space
+        self.rhs.assign(&self.field.to_ortho());
+        // add forcing
+        if let Some(x) = &self.force {
+            self.rhs = &self.rhs + &(x * self.dt);
+        }
+        // lhs: update unew
+        self.solver.solve(&self.rhs, &mut self.field.vhat, 0);
+        // update time
+        self.time += self.dt;
+    }
+
+    fn get_time(&self) -> f64 {
+        self.time
+    }
+
+    fn get_dt(&self) -> f64 {
+        self.dt
+    }
+
+    fn write(&mut self) {
+        std::fs::create_dir_all("data").unwrap();
+        let fname = format!("data/diffusion1d_complex_{:.*}.h5", 3, self.time);
+        self.field.backward();
+        self.field.write(&fname, None);
+    }
+
+    fn exit(&mut self) -> bool {
+        false
+    }
+}
+
 /// Solve 2-dimensional diffusion equation.
 ///
 /// Struct must be mutable, to perform the
@@ -110,9 +196,9 @@ impl Integrate for Diffusion1D {
 ///
 ///```
 /// use rustpde::*;
-/// use rustpde::integrate::diffusion::Diffusion2D;
+/// use rustpde::examples::diffusion::Diffusion2D;
 /// let bases = [cheb_dirichlet(7), cheb_dirichlet(7)];
-/// let mut field = Field::new(Space2::new(bases));
+/// let mut field = Field2::new(&bases);
 /// let mut diff = Diffusion2D::new(field, 1.0, 0.1);
 /// diff.impulse();
 /// diff.update();
@@ -133,7 +219,8 @@ pub struct Diffusion2D {
 impl Diffusion2D {
     /// Return instance
     pub fn new(field: Field2, kappa: f64, dt: f64) -> Self {
-        let solver = SolverField::Hholtz(Hholtz::from_field(&field, [dt * kappa, dt * kappa]));
+        let solver =
+            SolverField::Hholtz(Hholtz::from_space(&field.space, [dt * kappa, dt * kappa]));
         let rhs = Array2::zeros(field.v.raw_dim());
         Diffusion2D {
             field,
@@ -180,7 +267,7 @@ impl Integrate for Diffusion2D {
         for r in self.rhs.iter_mut() {
             *r = 0.;
         }
-        self.rhs = self.field.to_parent();
+        self.rhs = self.field.to_ortho();
 
         // add forcing
         if let Some(x) = &self.force {
