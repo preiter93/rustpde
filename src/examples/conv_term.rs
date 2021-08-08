@@ -1,7 +1,7 @@
 //! # Calculate convective terms u*dvdx
-use crate::Field2;
+use crate::types::Scalar;
+use crate::{Field, FieldBase};
 use ndarray::Array2;
-
 /// Calculate u*dvdx
 ///
 /// # Input
@@ -19,15 +19,21 @@ use ndarray::Array2;
 /// Array of u*dvdx term in physical space.
 ///
 /// Collect all convective terms, thatn transform to spectral space.
-pub fn conv_term(
-    field: &Field2,
-    deriv_field: &mut Field2,
+pub fn conv_term<T2>(
+    field: &FieldBase<f64, T2, 2>,
+    deriv_field: &mut FieldBase<f64, T2, 2>,
     u: &Array2<f64>,
     deriv: [usize; 2],
     scale: Option<[f64; 2]>,
-) -> Array2<f64> {
+) -> Array2<f64>
+where
+    FieldBase<f64, T2, 2>: Field<f64, T2, 2>,
+    T2: Scalar,
+{
     //dvdx
-    deriv_field.vhat *= 0.;
+    for v in deriv_field.vhat.iter_mut() {
+        *v = T2::zero();
+    }
     deriv_field.vhat.assign(&field.grad(deriv, scale));
     deriv_field.backward();
     //u*dvdx
@@ -37,7 +43,8 @@ pub fn conv_term(
 #[cfg(test)]
 mod navier {
     use super::*;
-    use crate::{cheb_dirichlet, cheb_neumann, chebyshev, Space2};
+    use crate::Field2;
+    use crate::{cheb_dirichlet, cheb_neumann, chebyshev};
     use std::f64::consts::PI;
 
     fn approx_eq<S, D>(result: &ndarray::ArrayBase<S, D>, expected: &ndarray::ArrayBase<S, D>)
@@ -56,13 +63,10 @@ mod navier {
     #[test]
     fn test_conv_term() {
         let (nx, ny) = (12, 12);
-        // Field
-        let bases = [cheb_dirichlet(nx), cheb_neumann(nx)];
-        let mut temp = Field2::new(Space2::new(bases));
-        let bases = [cheb_dirichlet(nx), cheb_dirichlet(nx)];
-        let mut ux = Field2::new(Space2::new(bases));
-        let bases = [chebyshev(nx), chebyshev(nx)];
-        let mut field = Field2::new(Space2::new(bases));
+        // Define fields
+        let mut temp = Field2::new(&[cheb_dirichlet(nx), cheb_neumann(nx)]);
+        let mut ux = Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(nx)]);
+        let mut field = Field2::new(&[chebyshev(nx), chebyshev(nx)]);
 
         //
         let x = field.x[0].to_owned();

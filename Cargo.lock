@@ -257,7 +257,7 @@ dependencies = [
 [[package]]
 name = "funspace"
 version = "0.1.3"
-source = "git+https://github.com/preiter93/funspace?branch=main#753de1ed5f0ce9332bbe23f120ca9ae1f6a6b7c1"
+source = "git+https://github.com/preiter93/funspace?branch=main#72cbc3db16862107eff25327ed5c096605f8bf13"
 dependencies = [
  "enum_dispatch",
  "ndarray",
@@ -286,7 +286,7 @@ checksum = "62aca2aba2d62b4a7f5b33f3712cb1b0692779a56fb510499d5c0aa594daeaf3"
 [[package]]
 name = "hdf5"
 version = "0.7.1"
-source = "git+https://github.com/preiter93/hdf5-interface?branch=master#82f83ba5fb0786a190448cea39cbbffc88b3b69c"
+source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5ae444b9e7a189137f511521864987de33"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -302,7 +302,7 @@ dependencies = [
 [[package]]
 name = "hdf5-derive"
 version = "0.7.1"
-source = "git+https://github.com/preiter93/hdf5-interface?branch=master#82f83ba5fb0786a190448cea39cbbffc88b3b69c"
+source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5ae444b9e7a189137f511521864987de33"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -312,16 +312,18 @@ dependencies = [
 [[package]]
 name = "hdf5-interface"
 version = "0.1.0"
-source = "git+https://github.com/preiter93/hdf5-interface?branch=master#82f83ba5fb0786a190448cea39cbbffc88b3b69c"
+source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5ae444b9e7a189137f511521864987de33"
 dependencies = [
  "hdf5",
  "ndarray",
+ "num-complex",
+ "num-traits",
 ]
 
 [[package]]
 name = "hdf5-sys"
 version = "0.7.1"
-source = "git+https://github.com/preiter93/hdf5-interface?branch=master#82f83ba5fb0786a190448cea39cbbffc88b3b69c"
+source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5ae444b9e7a189137f511521864987de33"
 dependencies = [
  "libc",
  "libloading",
@@ -335,7 +337,7 @@ dependencies = [
 [[package]]
 name = "hdf5-types"
 version = "0.7.1"
-source = "git+https://github.com/preiter93/hdf5-interface?branch=master#82f83ba5fb0786a190448cea39cbbffc88b3b69c"
+source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5ae444b9e7a189137f511521864987de33"
 dependencies = [
  "ascii",
  "cfg-if",
@@ -828,7 +830,7 @@ dependencies = [
 
 [[package]]
 name = "rustpde"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "criterion",
  "enum_dispatch",

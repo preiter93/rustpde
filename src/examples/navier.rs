@@ -5,9 +5,8 @@
 //! # Example
 //! Solve 2-D Rayleigh Benard Convection
 //! ```ignore
-//! use rustpde::integrate;
-//! use rustpde::integrate::Navier2D;
-//! use rustpde::Integrate;
+//! use rustpde::{Integrate, integrate};
+//! use rustpde::examples::Navier2D;
 //!
 //! fn main() {
 //!     // Parameters
@@ -28,12 +27,11 @@
 //! }
 //! ```
 use super::conv_term;
-use super::Integrate;
 use crate::bases::{cheb_dirichlet, cheb_dirichlet_bc, cheb_neumann, chebyshev};
 use crate::hdf5::{read_scalar_from_hdf5, write_scalar_to_hdf5};
 use crate::solver::{Hholtz, Poisson, Solve, SolverField};
-use crate::Field2;
-use crate::Space2;
+use crate::Integrate;
+use crate::{Field, Field2, ReadField, WriteField};
 use ndarray::{s, Array1, Array2};
 use std::collections::HashMap;
 
@@ -73,7 +71,8 @@ pub fn get_ka(ra: f64, pr: f64, height: f64) -> f64 {
 /// # Examples
 ///
 /// ```
-/// use rustpde::integrate::{integrate, Integrate, Navier2D};
+/// use rustpde::{integrate, Integrate};
+/// use rustpde::examples::Navier2D;
 /// let (nx, ny) = (33, 33);
 /// let ra = 1e5;
 /// let pr = 1.;
@@ -139,12 +138,12 @@ impl Navier2D {
         let scale = [aspect, 1.];
         let nu = get_nu(ra, pr, scale[1] * 2.0);
         let ka = get_ka(ra, pr, scale[1] * 2.0);
-        let ux = Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)]));
-        let uy = Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)]));
+        let ux = Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)]);
+        let uy = Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)]);
         let temp = if adiabatic {
-            Field2::new(Space2::new([cheb_neumann(nx), cheb_dirichlet(ny)]))
+            Field2::new(&[cheb_neumann(nx), cheb_dirichlet(ny)])
         } else {
-            Field2::new(Space2::new([cheb_dirichlet(nx), cheb_dirichlet(ny)]))
+            Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)])
         };
         Self::from_fields(temp, ux, uy, nu, ka, ra, pr, dt, scale)
     }
@@ -164,27 +163,27 @@ impl Navier2D {
         // define additional fields
         let nx = temp.v.shape()[0];
         let ny = temp.v.shape()[1];
-        let field = Field2::new(Space2::new([chebyshev(nx), chebyshev(ny)]));
+        let field = Field2::new(&[chebyshev(nx), chebyshev(ny)]);
         let pres = [
-            Field2::new(Space2::new([chebyshev(nx), chebyshev(ny)])),
-            Field2::new(Space2::new([cheb_neumann(nx), cheb_neumann(ny)])),
+            Field2::new(&[chebyshev(nx), chebyshev(ny)]),
+            Field2::new(&[cheb_neumann(nx), cheb_neumann(ny)]),
         ];
 
         // define solver
-        let solver_ux = SolverField::Hholtz(Hholtz::from_field(
-            &ux,
+        let solver_ux = SolverField::Hholtz(Hholtz::from_space(
+            &ux.space,
             [dt * nu / scale[0].powf(2.), dt * nu / scale[1].powf(2.)],
         ));
-        let solver_uy = SolverField::Hholtz(Hholtz::from_field(
-            &uy,
+        let solver_uy = SolverField::Hholtz(Hholtz::from_space(
+            &uy.space,
             [dt * nu / scale[0].powf(2.), dt * nu / scale[1].powf(2.)],
         ));
-        let solver_temp = SolverField::Hholtz(Hholtz::from_field(
-            &temp,
+        let solver_temp = SolverField::Hholtz(Hholtz::from_space(
+            &temp.space,
             [dt * ka / scale[0].powf(2.), dt * ka / scale[1].powf(2.)],
         ));
-        let solver_pres = SolverField::Poisson(Poisson::from_field(
-            &pres[1],
+        let solver_pres = SolverField::Poisson(Poisson::from_space(
+            &pres[1].space,
             [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
         ));
         let solver = [solver_ux, solver_uy, solver_temp, solver_pres];
@@ -250,7 +249,7 @@ impl Navier2D {
         use crate::bases::Transform;
         // Create base and field
         let mut bases = [chebyshev(nx), cheb_dirichlet_bc(ny)];
-        let mut fieldbc = Field2::new(Space2::new([chebyshev(nx), cheb_dirichlet_bc(ny)]));
+        let mut fieldbc = Field2::new(&[chebyshev(nx), cheb_dirichlet_bc(ny)]);
         let mut bc = fieldbc.vhat.to_owned();
 
         // Set boundary condition along axis
@@ -276,7 +275,7 @@ impl Navier2D {
         use crate::bases::Transform;
         // Create base and field
         let mut bases = [cheb_dirichlet_bc(nx), chebyshev(ny)];
-        let mut fieldbc = Field2::new(Space2::new([cheb_dirichlet_bc(nx), chebyshev(ny)]));
+        let mut fieldbc = Field2::new(&[cheb_dirichlet_bc(nx), chebyshev(ny)]);
         let mut bc = fieldbc.vhat.to_owned();
         // Sidewall temp function
         let transfer = transfer_function(&fieldbc.x[1], 0.5, 0., -0.5, k);
@@ -305,12 +304,12 @@ impl Navier2D {
     /// Convection term for temperature
     fn conv_temp(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) -> Array2<f64> {
         // + ux * dTdx + uy * dTdy
-        let mut conv = conv_term(&self.temp, &mut self.field, ux, [1, 0], Some(self.scale));
-        conv += &conv_term(&self.temp, &mut self.field, uy, [0, 1], Some(self.scale));
+        let mut conv = conv_term::<f64>(&self.temp, &mut self.field, ux, [1, 0], Some(self.scale));
+        conv += &conv_term::<f64>(&self.temp, &mut self.field, uy, [0, 1], Some(self.scale));
         // + bc contribution
         if let Some(field) = &self.fieldbc {
-            conv += &conv_term(field, &mut self.field, ux, [1, 0], Some(self.scale));
-            conv += &conv_term(field, &mut self.field, uy, [0, 1], Some(self.scale));
+            conv += &conv_term::<f64>(field, &mut self.field, ux, [1, 0], Some(self.scale));
+            conv += &conv_term::<f64>(field, &mut self.field, uy, [0, 1], Some(self.scale));
         }
         // + solid interaction
         if let Some(solid) = &self.solid {
@@ -331,8 +330,8 @@ impl Navier2D {
     /// Convection term for ux
     fn conv_ux(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) -> Array2<f64> {
         // + ux * dudx + uy * dudy
-        let mut conv = conv_term(&self.ux, &mut self.field, ux, [1, 0], Some(self.scale));
-        conv += &conv_term(&self.ux, &mut self.field, uy, [0, 1], Some(self.scale));
+        let mut conv = conv_term::<f64>(&self.ux, &mut self.field, ux, [1, 0], Some(self.scale));
+        conv += &conv_term::<f64>(&self.ux, &mut self.field, uy, [0, 1], Some(self.scale));
         // + solid interaction
         if let Some(solid) = &self.solid {
             let eta = 1e-3;
@@ -348,8 +347,8 @@ impl Navier2D {
     /// Convection term for uy
     fn conv_uy(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) -> Array2<f64> {
         // + ux * dudx + uy * dudy
-        let mut conv = conv_term(&self.uy, &mut self.field, ux, [1, 0], Some(self.scale));
-        conv += &conv_term(&self.uy, &mut self.field, uy, [0, 1], Some(self.scale));
+        let mut conv = conv_term::<f64>(&self.uy, &mut self.field, ux, [1, 0], Some(self.scale));
+        conv += &conv_term::<f64>(&self.uy, &mut self.field, uy, [0, 1], Some(self.scale));
         // + solid interaction
         if let Some(solid) = &self.solid {
             let eta = 1e-3;
@@ -369,7 +368,7 @@ impl Navier2D {
     fn solve_ux(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) {
         self.zero_rhs();
         // + old field
-        self.rhs += &self.ux.to_parent();
+        self.rhs += &self.ux.to_ortho();
         // + pres
         self.rhs -= &(self.dt * self.pres[0].grad([1, 0], Some(self.scale)));
         // + convection
@@ -384,7 +383,7 @@ impl Navier2D {
     fn solve_uy(&mut self, ux: &Array2<f64>, uy: &Array2<f64>, buoy: &Array2<f64>) {
         self.zero_rhs();
         // + old field
-        self.rhs += &self.uy.to_parent();
+        self.rhs += &self.uy.to_ortho();
         // + pres
         self.rhs -= &(self.dt * self.pres[0].grad([0, 1], Some(self.scale)));
         // + buoyancy
@@ -421,8 +420,8 @@ impl Navier2D {
 
         let ux_old = self.ux.vhat.clone();
         let uy_old = self.uy.vhat.clone();
-        self.ux.from_parent(&dpdx);
-        self.uy.from_parent(&dpdy);
+        self.ux.from_ortho(&dpdx);
+        self.uy.from_ortho(&dpdy);
         self.ux.vhat *= -c;
         self.uy.vhat *= -c;
         self.ux.vhat += &ux_old;
@@ -436,7 +435,7 @@ impl Navier2D {
     fn solve_temp(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) {
         self.zero_rhs();
         // + old field
-        self.rhs += &self.temp.to_parent();
+        self.rhs += &self.temp.to_ortho();
         // + diffusion bc contribution
         if let Some(field) = &self.fieldbc {
             self.rhs += &(self.dt * self.ka * field.grad([2, 0], Some(self.scale)));
@@ -464,7 +463,7 @@ impl Navier2D {
 
     fn update_pres(&mut self, div: &Array2<f64>) {
         self.pres[0].vhat -= &(self.nu * div);
-        self.pres[0].vhat += &(&self.pres[1].to_parent() / self.dt);
+        self.pres[0].vhat += &(&self.pres[1].to_ortho() / self.dt);
     }
 }
 
@@ -475,7 +474,7 @@ impl Navier2D {
     /// $$
     pub fn eval_nu(&mut self) -> f64 {
         use super::functions::eval_nu;
-        eval_nu(&mut self.temp, &mut self.field, &self.fieldbc, &self.scale)
+        eval_nu::<f64>(&mut self.temp, &mut self.field, &self.fieldbc, &self.scale)
     }
 
     /// Returns volumetric Nusselt number
@@ -484,7 +483,7 @@ impl Navier2D {
     /// $$
     pub fn eval_nuvol(&mut self) -> f64 {
         use super::functions::eval_nuvol;
-        eval_nuvol(
+        eval_nuvol::<f64>(
             &mut self.temp,
             &mut self.uy,
             &mut self.field,
@@ -497,7 +496,7 @@ impl Navier2D {
     /// Returns Reynolds number based on kinetic energy
     pub fn eval_re(&mut self) -> f64 {
         use super::functions::eval_re;
-        eval_re(
+        eval_re::<f64>(
             &mut self.ux,
             &mut self.uy,
             &mut self.field,
@@ -511,9 +510,9 @@ impl Integrate for Navier2D {
     ///         Update Navier Stokes
     fn update(&mut self) {
         // Buoyancy
-        let mut that = self.temp.to_parent();
+        let mut that = self.temp.to_ortho();
         if let Some(field) = &self.fieldbc {
-            that += &field.to_parent();
+            that += &field.to_ortho();
         }
 
         // Convection Veclocity
@@ -615,7 +614,7 @@ impl Integrate for Navier2D {
 }
 
 fn norm_l2(array: &Array2<f64>) -> f64 {
-    array.iter().map(|x| x.powf(2.0)).sum::<f64>().sqrt()
+    array.iter().map(|x| x.powi(2)).sum::<f64>().sqrt()
 }
 
 impl Navier2D {

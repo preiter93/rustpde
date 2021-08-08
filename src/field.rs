@@ -3,19 +3,45 @@
 pub mod average;
 pub mod read;
 pub mod write;
-use crate::bases::Differentiate;
-use crate::bases::FromOrtho;
-use crate::bases::TransformPar;
-use crate::space::{Space1, Space2, Spaced};
-use crate::{Real, SolverField};
+use crate::bases::SpaceBase;
+use crate::types::{FloatNum, Scalar};
+use crate::Base;
+use funspace::{Differentiate, FromOrtho, TransformPar};
 use ndarray::prelude::*;
+use ndarray::IntoDimension;
 use ndarray::Ix;
-use std::collections::HashMap;
+use ndarray::ScalarOperand;
+use num_complex::Complex;
+pub use read::ReadField;
+use std::convert::TryInto;
+pub use write::WriteField;
+// use crate::SolverField;
+// use std::collections::HashMap;
 
-/// One dimensional Field
-pub type Field1 = Field<Space1, f64, 1>;
-/// Two dimensional Field
-pub type Field2 = Field<Space2, f64, 2>;
+/// One dimensional Field (Spectral Space is Real)
+pub type Field1 = FieldBase<f64, f64, 1>;
+/// One dimensional Field (Spectral Space is Complex)
+pub type Field1Complex = FieldBase<f64, Complex<f64>, 1>;
+/// Two dimensional Field (Spectral Space is Real)
+pub type Field2 = FieldBase<f64, f64, 2>;
+/// Two dimensional Field (Spectral Space is Complex)
+pub type Field2Complex = FieldBase<f64, Complex<f64>, 2>;
+
+/// Transform and gradient operations
+pub trait Field<T1, T2, const N: usize> {
+    /// Type in Spectral space
+    type Output;
+    /// Forward transform of full field
+    fn forward(&mut self);
+    /// Backward transform of full field
+    fn backward(&mut self);
+    /// Transform full field to orthogonal space
+    fn to_ortho(&self) -> Array<T2, Dim<[usize; N]>>;
+    /// Transform full field from orthogonal space
+    fn from_ortho(&mut self, input: &Array<T2, Dim<[usize; N]>>);
+    /// Take gradient along axis. Optional: Rescale result by a constant.
+    fn grad(&self, deriv: [usize; N], scale: Option<[T1; N]>) -> Array<T2, Dim<[usize; N]>>;
+}
 
 /// Field struct is rustpdes backbone
 ///
@@ -31,192 +57,204 @@ pub type Field2 = Field<Space2, f64, 2>;
 ///
 ///   Grid points (physical space)
 ///
+/// dx: list of ndarrays
+///
+///   Grid points deltas (physical space)
+///
 /// solvers: HashMap<String, `SolverField`>
 ///
 ///  Add plans for various equations
 ///
-/// Field is derived from space.
-/// space mplements trait `Spaced`, which defines
-/// forward / backward transform from physical
-/// to spectral space + derivative in spectral space
+/// `FieldBase` is derived from `SpaceBase` struct,
+/// defined in the `funspace` crate.
+/// It implements forward / backward transform from physical
+/// to spectral space, differentation and casting
+/// from an orthonormal space to its galerkin space (`from_ortho`
+/// and `to_ortho`).
 ///
 /// # Example
 /// 2-D field in chebyshev space
 ///```
 /// use rustpde::cheb_dirichlet;
-/// use rustpde::Space2;
 /// use rustpde::Field2;
 /// let cdx = cheb_dirichlet(8);
 /// let cdy = cheb_dirichlet(6);
-/// let field = Field2::new(Space2::new([cdx,cdy]));
+/// let field = Field2::new(&[cdx,cdy]);
 ///```
 #[derive(Clone)]
-pub struct Field<S, T, const N: usize> {
+pub struct FieldBase<T: FloatNum, T2, const N: usize> {
     /// Number of dimensions
     pub ndim: usize,
     /// Space
-    pub space: S,
+    pub space: SpaceBase<T, N>,
     /// Field in physical space
-    pub v: Array<Real, Dim<[Ix; N]>>,
+    pub v: Array<T, Dim<[Ix; N]>>,
     /// Field in spectral space
-    pub vhat: Array<T, Dim<[Ix; N]>>,
+    pub vhat: Array<T2, Dim<[Ix; N]>>,
     /// Grid coordinates
-    pub x: [Array1<f64>; N],
+    pub x: [Array1<T>; N],
     /// Grid deltas
-    pub dx: [Array1<f64>; N],
-    /// Collection of mathematical solvers
-    pub solvers: HashMap<String, SolverField<T, N>>,
+    pub dx: [Array1<T>; N],
+    // /// Collection of numerical solvers (Poisson, Hholtz, ...)
+    // pub solvers: HashMap<String, SolverField<T, N>>,
 }
 
-impl<S, T, const N: usize> Field<S, T, N>
+impl<T, T2, const N: usize> FieldBase<T, T2, N>
 where
-    S: Spaced<T, N>,
+    T: FloatNum,
+    T2: Scalar,
+    [usize; N]: IntoDimension<Dim = Dim<[usize; N]>>,
+    Dim<[usize; N]>: Dimension,
 {
-    /// Returns field
-    pub fn new(space: S) -> Self {
-        let ndim = N;
-        let v = space.ndarr_phys();
-        let vhat = space.ndarr_spec();
-        let x = space.get_x();
-        let dx = Self::get_dx(&x);
-        Field {
-            ndim,
-            space,
-            v,
-            vhat,
-            x,
-            dx,
-            solvers: HashMap::new(),
+    /// Return a new field from an array of Bases
+    pub fn new(bases: &[Base<T>; N]) -> Self {
+        let space = SpaceBase::new(bases);
+        Self {
+            ndim: N,
+            space: space.clone(),
+            v: space.ndarray_physical(),
+            vhat: space.ndarray_spectral(),
+            x: space.coords(),
+            dx: Self::get_dx(&space.coords()),
         }
     }
 
+    /// Return a new field from `SpaceBase` struct
+    pub fn from_space(space: &SpaceBase<T, N>) -> Self {
+        Self::new(&space.bases)
+    }
+
     /// Generate grid deltas from coordinates
-    fn get_dx(x_arr: &[Array1<f64>; N]) -> [Array1<f64>; N] {
-        use std::convert::TryInto;
+    ///
+    /// ## Panics
+    /// When vec to array convection fails
+    fn get_dx(x_arr: &[Array1<T>; N]) -> [Array1<T>; N] {
         let mut dx_vec = Vec::new();
+        let two = T::one() + T::one();
         for x in x_arr.iter() {
-            let mut dx = Array1::<f64>::zeros(x.len());
+            let mut dx = Array1::<T>::zeros(x.len());
             for (i, dxi) in dx.iter_mut().enumerate() {
-                let xs_left = if i == 0 { x[0] } else { (x[i] + x[i - 1]) / 2. };
+                let xs_left = if i == 0 {
+                    x[0]
+                } else {
+                    (x[i] + x[i - 1]) / two
+                };
                 let xs_right = if i == x.len() - 1 {
                     x[x.len() - 1]
                 } else {
-                    (x[i + 1] + x[i]) / 2.
+                    (x[i + 1] + x[i]) / two
                 };
                 *dxi = xs_right - xs_left;
             }
             dx_vec.push(dx);
         }
-        dx_vec.try_into().unwrap_or_else(|v: Vec<Array1<f64>>| {
+        dx_vec.try_into().unwrap_or_else(|v: Vec<Array1<T>>| {
             panic!("Expected Vec of length {} but got {}", N, v.len())
         })
     }
 }
 
-impl<S: Spaced<f64, 1>> Field<S, Real, 1> {
-    /// Forward transform 1d
-    pub fn forward(&mut self) {
-        self.space.get_bases_mut()[0].forward_inplace_par(&mut self.v, &mut self.vhat, 0);
-    }
-    /// Backward transform 1d
-    pub fn backward(&mut self) {
-        self.space.get_bases_mut()[0].backward_inplace_par(&mut self.vhat, &mut self.v, 0);
-    }
+macro_rules! impl_field1 {
+    ($a: ty) => {
+        impl<T> Field<T, $a, 1> for FieldBase<T, $a, 1>
+        where
+            T: FloatNum,
+            $a: std::ops::DivAssign,
+            Complex<T>: ScalarOperand,
+        {
+            type Output = $a;
+            /// Forward transform 1d
+            fn forward(&mut self) {
+                self.space
+                    .forward_inplace_par(&mut self.v, &mut self.vhat, 0);
+            }
 
-    /// Transform to parent space
-    pub fn to_parent(&self) -> Array1<Real> {
-        self.space.get_bases()[0].to_ortho(&self.vhat, 0)
-    }
+            /// Backward transform 1d
+            fn backward(&mut self) {
+                self.space
+                    .backward_inplace_par(&mut self.vhat, &mut self.v, 0);
+            }
 
-    /// Transform to child space
-    pub fn from_parent(&mut self, input: &Array1<f64>) {
-        self.vhat
-            .assign(&self.space.get_bases()[0].from_ortho(input, 0));
-    }
+            /// Transform to parent space
+            fn to_ortho(&self) -> Array1<Self::Output> {
+                self.space.to_ortho(&self.vhat, 0)
+            }
 
-    /// Gradient
-    #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
-    fn grad(&self, deriv: [usize; 1], scale: Option<[f64; 1]>) -> Array1<Real> {
-        let mut output = self.space.get_bases()[0].differentiate(&self.vhat, deriv[0], 0);
-        if let Some(s) = scale {
-            output /= s[0].powi(deriv[0] as i32);
+            /// Transform to child space
+            fn from_ortho(&mut self, input: &Array1<Self::Output>) {
+                self.vhat.assign(&self.space.from_ortho(input, 0));
+            }
+
+            /// Gradient
+            #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+            fn grad(&self, deriv: [usize; 1], scale: Option<[T; 1]>) -> Array1<Self::Output> {
+                let mut output = self.space.differentiate(&self.vhat, deriv[0], 0);
+                if let Some(s) = scale {
+                    let scale_1: $a = (s[0].powi(deriv[0] as i32)).into();
+                    output /= scale_1;
+                }
+                output
+            }
         }
-        output
-    }
+    };
+}
+// Float
+impl_field1!(T);
+// Complex
+impl_field1!(Complex<T>);
+
+macro_rules! impl_field2 {
+    ($a: ty) => {
+        impl<T> Field<T, $a, 2> for FieldBase<T, $a, 2>
+        where
+            T: FloatNum,
+            $a: std::ops::DivAssign,
+            Complex<T>: ScalarOperand,
+        {
+            type Output = $a;
+            /// Forward transform 1d
+            fn forward(&mut self) {
+                let mut buffer = self.space.forward_par(&mut self.v, 1);
+                self.space
+                    .forward_inplace_par(&mut buffer, &mut self.vhat, 0);
+            }
+
+            /// Backward transform 1d
+            fn backward(&mut self) {
+                let mut buffer = self.space.backward_par(&mut self.vhat, 0);
+                self.space.backward_inplace_par(&mut buffer, &mut self.v, 1);
+            }
+
+            /// Transform to parent space
+            fn to_ortho(&self) -> Array2<Self::Output> {
+                let buffer = self.space.to_ortho(&self.vhat, 1);
+                self.space.to_ortho(&buffer, 0)
+            }
+
+            /// Transform to child space
+            fn from_ortho(&mut self, input: &Array2<Self::Output>) {
+                let buffer = self.space.from_ortho(input, 1);
+                self.vhat.assign(&self.space.from_ortho(&buffer, 0));
+            }
+
+            /// Gradient
+            #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+            fn grad(&self, deriv: [usize; 2], scale: Option<[T; 2]>) -> Array2<Self::Output> {
+                let buffer = self.space.differentiate(&self.vhat, deriv[0], 0);
+                let mut output = self.space.differentiate(&buffer, deriv[1], 1);
+                if let Some(s) = scale {
+                    let scale_1: $a = (s[0].powi(deriv[0] as i32)).into();
+                    let scale_2: $a = (s[1].powi(deriv[0] as i32)).into();
+                    output /= scale_1;
+                    output /= scale_2;
+                }
+                output
+            }
+        }
+    };
 }
 
-impl<S: Spaced<f64, 2>> Field<S, Real, 2> {
-    /// Forward transform 2d
-    pub fn forward(&mut self) {
-        let mut buffer = self.space.get_bases_mut()[1].forward_par(&mut self.v, 1);
-        self.space.get_bases_mut()[0].forward_inplace_par(&mut buffer, &mut self.vhat, 0);
-    }
-    /// Backward transform 2d
-    pub fn backward(&mut self) {
-        let mut buffer = self.space.get_bases_mut()[0].backward_par(&mut self.vhat, 0);
-        self.space.get_bases_mut()[1].backward_inplace_par(&mut buffer, &mut self.v, 1);
-    }
-
-    /// Transform to parent space
-    pub fn to_parent(&self) -> Array2<Real> {
-        let axis0 = self.space.get_bases()[0].to_ortho(&self.vhat, 0);
-        self.space.get_bases()[1].to_ortho(&axis0, 1)
-    }
-
-    /// Transform to child space
-    pub fn from_parent(&mut self, input: &Array2<f64>) {
-        let axis0 = self.space.get_bases()[0].from_ortho(input, 0);
-        self.vhat
-            .assign(&self.space.get_bases()[1].from_ortho(&axis0, 1));
-    }
-
-    /// Gradient
-    #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
-    pub fn grad(&self, deriv: [usize; 2], scale: Option<[f64; 2]>) -> Array2<Real> {
-        let buffer = self.space.get_bases()[0].differentiate(&self.vhat, deriv[0], 0);
-        let mut output = self.space.get_bases()[1].differentiate(&buffer, deriv[1], 1);
-        if let Some(s) = scale {
-            output /= s[0].powi(deriv[0] as i32);
-            output /= s[1].powi(deriv[1] as i32);
-        }
-        output
-    }
-}
-
-// impl<S: Spaced<Complex<f64>, 2>> Field<S, Complex<f64>, 2> {
-//     /// Forward transform 2d
-//     pub fn forward(&mut self) {
-//         let mut buffer = self.space.get_bases_mut()[1].forward_par(&mut self.v, 1);
-//         self.space.get_bases_mut()[0].forward_inplace_par(&mut buffer, &mut self.vhat, 0);
-//     }
-//     /// Backward transform 2d
-//     pub fn backward(&mut self) {
-//         let mut buffer = self.space.get_bases_mut()[0].backward_par(&mut self.vhat, 0);
-//         self.space.get_bases_mut()[1].backward_inplace_par(&mut buffer, &mut self.v, 1);
-//     }
-
-//     /// Transform to parent space
-//     pub fn to_parent(&self) -> Array2<Complex<f64>> {
-//         let axis0 = self.space.get_bases()[0].to_ortho(&self.vhat, 0);
-//         self.space.get_bases()[1].to_ortho(&axis0, 1)
-//     }
-
-//     /// Transform to child space
-//     pub fn from_parent(&mut self, input: &Array2<f64>) {
-//         let axis0 = self.space.get_bases()[0].from_ortho(input, 0);
-//         self.vhat
-//             .assign(&self.space.get_bases()[1].from_ortho(&axis0, 1));
-//     }
-
-//     /// Gradient
-//     #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
-//     pub fn grad(&self, deriv: [usize; 2], scale: Option<[f64; 2]>) -> Array2<Complex<f64>> {
-//         let buffer = self.space.get_bases()[0].differentiate(&self.vhat, deriv[0], 0);
-//         let mut output = self.space.get_bases()[1].differentiate(&buffer, deriv[1], 1);
-//         if let Some(s) = scale {
-//             output /= s[0].powi(deriv[0] as i32);
-//             output /= s[1].powi(deriv[1] as i32);
-//         }
-//         output
-//     }
-// }
+// Float
+impl_field2!(T);
+// Complex
+impl_field2!(Complex<T>);

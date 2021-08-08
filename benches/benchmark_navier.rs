@@ -1,6 +1,6 @@
 use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
-use rustpde::integrate::navier::Navier2D;
+use rustpde::examples::navier::Navier2D;
 use rustpde::Integrate;
 
 const EVEN: [usize; 3] = [128, 264, 512];

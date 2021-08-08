@@ -1,15 +1,32 @@
 //! Implement reading from hdf5 file for struct Field
-use super::Field;
+use super::{Field, FieldBase};
 use crate::hdf5::read_from_hdf5;
+use crate::hdf5::read_from_hdf5_complex;
+use crate::hdf5::H5Type;
+use crate::types::FloatNum;
+use ndarray::prelude::*;
+use ndarray::ScalarOperand;
+use num_complex::Complex;
+use std::clone::Clone;
 
-/// 1-D
-impl<S> Field<S, f64, 1>
+/// Write field to hdf5 file
+pub trait ReadField<T1, T2> {
+    /// Read Field data from hdf5 file
+    fn read(&mut self, filename: &str, group: Option<&str>);
+    // Broadcast shape from hdf5 file to field. Only
+    // used when both fields mismatch. This is equivalent
+    // to an interpolation.
+    //fn interpolate<T: Clone>(old: Array2<T>, new: &mut Array2<T>);
+}
+
+/// Implement for 1-D field, which has a real valued spectral space
+impl<T> ReadField<T, T> for FieldBase<T, T, 1>
 where
-    S: crate::Spaced<f64, 1_usize>,
+    T: FloatNum + H5Type + std::ops::DivAssign,
+    Complex<T>: ScalarOperand,
 {
-    /// Read hdf5 file and store results in Field
-    pub fn read(&mut self, filename: &str, group: Option<&str>) {
-        let result = read_from_hdf5::<f64, ndarray::Ix1>(filename, "vhat", group);
+    fn read(&mut self, filename: &str, group: Option<&str>) {
+        let result = read_from_hdf5::<T, Ix1>(filename, "vhat", group);
         match result {
             Ok(x) => {
                 self.vhat.assign(&x);
@@ -21,19 +38,33 @@ where
     }
 }
 
-/// 2-D
-impl<S> Field<S, f64, 2>
+/// Implement for 1-D field, which has a complex valued spectral space
+impl<T> ReadField<T, Complex<T>> for FieldBase<T, Complex<T>, 1>
 where
-    S: crate::Spaced<f64, 2_usize>,
+    T: FloatNum + H5Type,
+    Complex<T>: ScalarOperand + std::ops::DivAssign,
 {
-    /// Read hdf5 file and store results in Field
-    ///
-    /// Reads spectral coefficients only and restores
-    /// physical field by a backtransform.
-    /// Supports reading of same shape but different
-    /// size arrays.
-    pub fn read(&mut self, filename: &str, group: Option<&str>) {
-        let result = read_from_hdf5::<f64, ndarray::Ix2>(filename, "vhat", group);
+    fn read(&mut self, filename: &str, group: Option<&str>) {
+        let result = read_from_hdf5_complex::<T, Ix1>(filename, "vhat", group);
+        match result {
+            Ok(x) => {
+                self.vhat.assign(&x);
+                self.backward();
+                println!("Reading file {:?} was successfull.", filename);
+            }
+            Err(_) => println!("Error while reading file {:?}.", filename),
+        }
+    }
+}
+
+/// Implement for 2-D field, which has a real valued spectral space
+impl<T> ReadField<T, T> for FieldBase<T, T, 2>
+where
+    T: FloatNum + H5Type + std::ops::DivAssign,
+    Complex<T>: ScalarOperand,
+{
+    fn read(&mut self, filename: &str, group: Option<&str>) {
+        let result = read_from_hdf5::<T, Ix2>(filename, "vhat", group);
         match result {
             Ok(x) => {
                 if x.shape() == self.vhat.shape() {
@@ -46,7 +77,34 @@ where
                     );
                     broadcast_2d(&x, &mut self.vhat);
                 }
+                self.backward();
+                println!("Reading file {:?} was successfull.", filename);
+            }
+            Err(_) => println!("Error while reading file {:?}.", filename),
+        }
+    }
+}
 
+/// Implement for 2-D field, which has a complex valued spectral space
+impl<T> ReadField<T, Complex<T>> for FieldBase<T, Complex<T>, 2>
+where
+    T: FloatNum + H5Type,
+    Complex<T>: ScalarOperand + std::ops::DivAssign,
+{
+    fn read(&mut self, filename: &str, group: Option<&str>) {
+        let result = read_from_hdf5_complex::<T, Ix2>(filename, "vhat", group);
+        match result {
+            Ok(x) => {
+                if x.shape() == self.vhat.shape() {
+                    self.vhat.assign(&x);
+                } else {
+                    println!(
+                        "Attention! Broadcast from shape {:?} to shape {:?}.",
+                        x.shape(),
+                        self.vhat.shape()
+                    );
+                    broadcast_2d(&x, &mut self.vhat);
+                }
                 self.backward();
                 println!("Reading file {:?} was successfull.", filename);
             }
@@ -56,8 +114,7 @@ where
 }
 
 /// Broadcast 2d array
-fn broadcast_2d<T: std::clone::Clone>(old: &ndarray::Array2<T>, new: &mut ndarray::Array2<T>) {
-    use ndarray::s;
+fn broadcast_2d<T: Clone>(old: &Array2<T>, new: &mut Array2<T>) {
     let sh: Vec<usize> = old
         .shape()
         .iter()

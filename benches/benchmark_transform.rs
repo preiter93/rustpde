@@ -8,10 +8,9 @@ pub fn bench_transform(c: &mut Criterion) {
     let mut group = c.benchmark_group("Transform");
     group.significance_level(0.1).sample_size(10);
     for n in SIZES.iter() {
-        let cdx = cheb_dirichlet(*n);
-        let cdy = cheb_dirichlet(*n);
-        let space = Space::new([cdx, cdy]);
-        let mut field = Field2::new(space);
+        let cdx = cheb_dirichlet::<f64>(*n);
+        let cdy = cheb_dirichlet::<f64>(*n);
+        let mut field = Field2::new(&[cdx, cdy]);
         for (i, v) in field.v.iter_mut().enumerate() {
             *v = i as f64;
         }
