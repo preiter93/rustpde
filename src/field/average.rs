@@ -8,7 +8,7 @@ impl<T: FloatNum, T2> FieldBase<T, T2, 2> {
     /// # Example
     ///```
     /// use ndarray::{array, Axis};
-    /// use rustpde::{chebyshev, Field2, Space2};
+    /// use rustpde::{chebyshev, Field2};
     /// let (nx, ny) = (64, 66);
     /// let mut field = Field2::new(&[chebyshev(nx), chebyshev(ny)]);
     /// let (nx, ny) = (6, 5);
@@ -35,7 +35,7 @@ impl<T: FloatNum, T2> FieldBase<T, T2, 2> {
     /// # Example
     ///```
     /// use ndarray::{array, Axis};
-    /// use rustpde::{chebyshev, Field2, Space2};
+    /// use rustpde::{chebyshev, Field2};
     /// let (nx, ny) = (64, 66);
     /// let mut field = Field2::new(&[chebyshev(nx), chebyshev(ny)]);
     /// let (nx, ny) = (6, 5);

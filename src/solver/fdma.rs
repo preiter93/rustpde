@@ -164,10 +164,10 @@ where
         output: &mut ArrayBase<S2, D>,
         axis: usize,
     ) {
-        assert!(
-            self.sweeped,
-            "Fdma: Forward sweep must be performed for solve! Abort."
-        );
+        //assert!(
+        //    self.sweeped,
+        //    "Fdma: Forward sweep must be performed for solve! Abort."
+        //);
         output.assign(input);
         Zip::from(output.lanes_mut(Axis(axis))).for_each(|mut out| {
             self.solve_lane(&mut out);
