@@ -12,7 +12,7 @@ pub mod utils;
 pub use fdma::Fdma;
 pub use fdma_tensor::FdmaTensor;
 pub use hholtz::Hholtz;
-pub use matvec::{MatVec, MatVecDot};
+pub use matvec::{MatVec, MatVecDot, MatVecFdma};
 use ndarray::{Array, ArrayBase, Data, DataMut};
 use num_complex::Complex;
 pub use poisson::Poisson;

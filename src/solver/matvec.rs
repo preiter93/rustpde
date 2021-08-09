@@ -1,7 +1,7 @@
 //! Collection of (sparse) matrix/vector products
 use super::{SolveReturn, SolverScalar};
-use ndarray::prelude::*;
 use ndarray::Data;
+use ndarray::{prelude::*, DataMut};
 use num_traits::Zero;
 use std::ops::{Add, Div, Mul};
 
@@ -11,6 +11,8 @@ use std::ops::{Add, Div, Mul};
 pub enum MatVec<T> {
     /// Ndarrays Matrix Vector Product
     MatVecDot(MatVecDot<T>),
+    /// Banded Matrix Vector Product with offsets -2, 0, 2, 4
+    MatVecFdma(MatVecFdma<T>),
 }
 
 // Don't know how to use enum_dispatch with
@@ -26,6 +28,7 @@ where
     {
         match self {
             MatVec::MatVecDot(ref t) => t.solve(input, axis),
+            MatVec::MatVecFdma(ref t) => t.solve(input, axis),
         }
     }
 }
@@ -41,6 +44,7 @@ where
     {
         match self {
             MatVec::MatVecDot(ref t) => t.solve(input, axis),
+            MatVec::MatVecFdma(ref t) => t.solve(input, axis),
         }
     }
 }
@@ -54,7 +58,7 @@ pub struct MatVecDot<T> {
     mat: Array2<T>,
 }
 
-impl<T: SolverScalar> MatVecDot<T> {
+impl<T: SolverScalar + std::fmt::Debug> MatVecDot<T> {
     /// Return new `MatVecDot` (wrapper around ndarray)
     pub fn new(mat: &Array2<T>) -> Self {
         MatVecDot {
@@ -115,6 +119,122 @@ where
     }
 }
 
+/// Use if Matrix is banded with offets -2, 0, 2, 4
+#[derive(Debug, Clone)]
+pub struct MatVecFdma<T> {
+    /// Number of matrix rows
+    pub m: usize,
+    /// Number of matrix columns
+    pub n: usize,
+    /// Lower diagonal (-2)
+    pub low: Array1<T>,
+    /// Main diagonal
+    pub dia: Array1<T>,
+    /// Upper diagonal (+2)
+    pub up1: Array1<T>,
+    /// Upper diagonal (+4)
+    pub up2: Array1<T>,
+}
+
+impl<T: SolverScalar> MatVecFdma<T> {
+    /// Initialize Fdma from matrix.
+    pub fn new(a: &Array2<T>) -> Self {
+        let m = a.shape()[0];
+        let n = a.shape()[1];
+        let mut low: Array1<T> = Array1::zeros(m);
+        let mut dia: Array1<T> = Array1::zeros(m);
+        let mut up1: Array1<T> = Array1::zeros(m);
+        let mut up2: Array1<T> = Array1::zeros(m);
+        for i in 0..m {
+            dia[i] = a[[i, i]];
+            if i > 1 {
+                low[i] = a[[i, i - 2]];
+            }
+            if i < m - 2 {
+                up1[i] = a[[i, i + 2]];
+            }
+            if i < m - 4 {
+                up2[i] = a[[i, i + 4]];
+            }
+        }
+
+        Self {
+            m,
+            n,
+            low,
+            dia,
+            up1,
+            up2,
+        }
+    }
+
+    fn solve_lane<S1, S2, A>(&self, input: &ArrayBase<S1, Ix1>, output: &mut ArrayBase<S2, Ix1>)
+    where
+        S1: Data<Elem = A>,
+        S2: Data<Elem = A> + DataMut,
+        A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A>,
+    {
+        //self.fdma(input);
+        let n = output.len();
+
+        for i in 0..n {
+            output[i] = input[i] * self.dia[i];
+            if i > 1 {
+                output[i] = output[i] + input[i - 2] * self.low[i];
+            }
+            if i < n - 2 {
+                output[i] = output[i] + input[i + 2] * self.up1[i];
+            }
+            if i < n - 4 {
+                output[i] = output[i] + input[i + 4] * self.up2[i];
+            }
+        }
+    }
+}
+
+#[allow(unused_variables)]
+impl<T, A> SolveReturn<A, Ix1> for MatVecFdma<T>
+where
+    T: SolverScalar,
+    A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A> + From<T>,
+{
+    fn solve<S1>(&self, input: &ArrayBase<S1, Ix1>, axis: usize) -> Array<A, Ix1>
+    where
+        S1: Data<Elem = A>,
+    {
+        let mut output = Array1::zeros(self.m);
+        self.solve_lane(input, &mut output);
+        output
+    }
+}
+
+impl<T, A> SolveReturn<A, Ix2> for MatVecFdma<T>
+where
+    T: SolverScalar,
+    A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A> + From<T>,
+{
+    fn solve<S1>(&self, input: &ArrayBase<S1, Ix2>, axis: usize) -> Array<A, Ix2>
+    where
+        S1: Data<Elem = A>,
+    {
+        if axis == 0 {
+            let (m, n) = (self.m, input.shape()[1]);
+            let mut output = Array2::zeros((m, n));
+            for i in 0..n {
+                self.solve_lane(&input.slice(s![.., i]), &mut output.slice_mut(s![.., i]));
+            }
+            output
+        } else {
+            let (n, m) = (self.m, input.shape()[0]);
+            let mut output = Array2::zeros((m, n));
+            for i in 0..m {
+                self.solve_lane(&input.slice(s![i, ..]), &mut output.slice_mut(s![i, ..]));
+            }
+            output
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,8 +284,8 @@ mod tests {
     #[test]
     fn test_matvecdot_dim2() {
         let nx = 6;
-        let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, nx));
-        let mut matrix = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, nx));
+        let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx + 2, nx + 2));
+        let mut matrix = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, nx + 2));
         for (i, v) in data.iter_mut().enumerate() {
             *v = i as f64;
         }
@@ -190,6 +310,39 @@ mod tests {
 
         let result = matvec.solve(&data, 1);
         let expected = matrix.dot(&data.t());
+        approx_eq(&result, &expected.t().to_owned());
+    }
+
+    #[test]
+    fn test_matvecfdma_dim2() {
+        let nx = 6;
+        let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx + 2, nx + 2));
+        let mut matrix = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, nx + 2));
+        for (i, v) in data.iter_mut().enumerate() {
+            *v = i as f64;
+        }
+        for i in 0..nx {
+            let j = (i + 1) as f64;
+            matrix[[i, i]] = 0.5 * j;
+            if i > 1 {
+                matrix[[i, i - 2]] = 10. * j;
+            }
+            if i < nx - 2 {
+                matrix[[i, i + 2]] = 1.5 * j;
+            }
+            if i < nx - 4 {
+                matrix[[i, i + 4]] = 2.5 * j;
+            }
+        }
+
+        let matvecfdma = MatVec::MatVecFdma(MatVecFdma::new(&matrix));
+        let result = matvecfdma.solve(&data, 0);
+        let expected = matrix.dot(&data);
+        approx_eq(&result, &expected);
+
+        let result = matvecfdma.solve(&data, 1);
+        let expected = matrix.dot(&data.t());
+
         approx_eq(&result, &expected.t().to_owned());
     }
 }

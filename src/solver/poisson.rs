@@ -129,12 +129,12 @@ impl<const N: usize> Poisson<f64, N> {
     /// Returns the solver for the rhs, depending on the base
     #[allow(clippy::unnecessary_wraps)]
     fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<f64>> {
-        use crate::solver::MatVecDot;
+        use crate::solver::MatVecFdma;
         match base {
             Base::Chebyshev(_) | Base::CompositeChebyshev(_) => {
                 let pinv = base.laplace_inv();
                 let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
-                let matvec = MatVec::MatVecDot(MatVecDot::new(&mat));
+                let matvec = MatVec::MatVecFdma(MatVecFdma::new(&mat));
                 Some(matvec)
             }
             Base::FourierC2c(_) | Base::FourierR2c(_) => None,

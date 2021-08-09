@@ -21,4 +21,4 @@ pub use funspace::FromOrtho;
 pub use funspace::LaplacianInverse;
 pub use funspace::Transform;
 pub use funspace::TransformPar;
-pub use funspace::{Space1, Space2, SpaceBase};
+pub use funspace::{Space, Space1, Space2, SpaceBase};

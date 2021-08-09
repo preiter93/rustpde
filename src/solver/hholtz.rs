@@ -90,14 +90,14 @@ impl<const N: usize> Hholtz<f64, N>
     /// Returns the solver for the rhs, depending on the base
     #[allow(clippy::unnecessary_wraps)]
     fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<f64>> {
-        use crate::solver::MatVecDot;
+        use crate::solver::MatVecFdma;
         match base {
             Base::Chebyshev(_) | Base::CompositeChebyshev(_) => {
                 let peye = base.laplace_inv_eye();
                 let pinv = base.laplace_inv();
                 //let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
                 let mat = peye.dot(&pinv);
-                let matvec = MatVec::MatVecDot(MatVecDot::new(&mat));
+                let matvec = MatVec::MatVecFdma(MatVecFdma::new(&mat));
                 Some(matvec)
             }
             Base::FourierC2c(_) | Base::FourierR2c(_) => None,
@@ -155,12 +155,24 @@ where
         S2: Data<Elem = A> + DataMut,
     {
         // Matvec
-        let mut rhs = self.matvec[0]
-            .as_ref()
-            .map_or_else(|| input.to_owned(), |x| x.solve(input, 0));
-        if let Some(x) = &self.matvec[1] {
-            rhs = x.solve(&rhs, 1);
-        }
+        // let mut rhs = self.matvec[0]
+        //     .as_ref()
+        //     .map_or_else(|| input.to_owned(), |x| x.solve(input, 0));
+        // if let Some(x) = &self.matvec[1] {
+        //     rhs = x.solve(&rhs, 1);
+        // }
+
+        // Matvec
+        let rhs = if let Some(x) = &self.matvec[0] {
+            x.solve(&input, 0)
+        } else {
+            input.to_owned()
+        };
+        let rhs = if let Some(x) = &self.matvec[1] {
+            x.solve(&rhs, 1)
+        } else {
+            rhs
+        };
 
         // Solve
         self.solver[0].solve(&rhs, output, 0);

@@ -2,8 +2,8 @@ use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
 use rustpde::cheb_dirichlet;
 use rustpde::examples::diffusion::Diffusion2D;
+use rustpde::Field2;
 use rustpde::Integrate;
-use rustpde::{Field2};
 
 const SIZES: [usize; 4] = [128, 264, 512, 1024];
 

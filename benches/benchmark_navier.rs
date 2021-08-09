@@ -31,10 +31,10 @@ pub fn bench_diffusion(c: &mut Criterion) {
     for (n1, n2) in EVEN.iter().zip(ODD.iter()) {
         let mut navier = Navier2D::new(*n1, *n1, ra, pr, dt, adiabatic, aspect);
         let name = format!("Size: {}", *n1);
-        group.bench_function(&name, |b| b.iter(|| integrate(&mut navier)));
+        group.bench_function(&name, |b| b.iter(|| navier.update()));
         let mut navier = Navier2D::new(*n2, *n2, ra, pr, dt, adiabatic, aspect);
         let name = format!("Size: {}", *n2);
-        group.bench_function(&name, |b| b.iter(|| integrate(&mut navier)));
+        group.bench_function(&name, |b| b.iter(|| navier.update()));
     }
     group.finish();
 }

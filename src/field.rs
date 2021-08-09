@@ -3,10 +3,9 @@
 pub mod average;
 pub mod read;
 pub mod write;
-use crate::bases::SpaceBase;
+use crate::bases::{Space, SpaceBase};
 use crate::types::{FloatNum, Scalar};
 use crate::Base;
-use funspace::{Differentiate, FromOrtho, TransformPar};
 use ndarray::prelude::*;
 use ndarray::IntoDimension;
 use ndarray::Ix;
@@ -154,9 +153,9 @@ where
     }
 }
 
-macro_rules! impl_field1 {
-    ($a: ty) => {
-        impl<T> Field<T, $a, 1> for FieldBase<T, $a, 1>
+macro_rules! impl_space_functions {
+    ($a: ty, $n: expr) => {
+        impl<T> Field<T, $a, $n> for FieldBase<T, $a, $n>
         where
             T: FloatNum,
             $a: std::ops::DivAssign,
@@ -166,95 +165,145 @@ macro_rules! impl_field1 {
             /// Forward transform 1d
             fn forward(&mut self) {
                 self.space
-                    .forward_inplace_par(&mut self.v, &mut self.vhat, 0);
+                    .forward_space_inplace_par(&mut self.v, &mut self.vhat);
             }
 
             /// Backward transform 1d
             fn backward(&mut self) {
                 self.space
-                    .backward_inplace_par(&mut self.vhat, &mut self.v, 0);
+                    .backward_space_inplace_par(&mut self.vhat, &mut self.v);
             }
 
             /// Transform to parent space
-            fn to_ortho(&self) -> Array1<Self::Output> {
-                self.space.to_ortho(&self.vhat, 0)
+            fn to_ortho(&self) -> Array<$a, Dim<[usize; $n]>> {
+                self.space.to_ortho_space(&self.vhat)
             }
 
             /// Transform to child space
-            fn from_ortho(&mut self, input: &Array1<Self::Output>) {
-                self.vhat.assign(&self.space.from_ortho(input, 0));
+            fn from_ortho(&mut self, input: &Array<$a, Dim<[usize; $n]>>) {
+                self.space.from_ortho_space_inplace(input, &mut self.vhat);
             }
 
             /// Gradient
-            #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
-            fn grad(&self, deriv: [usize; 1], scale: Option<[T; 1]>) -> Array1<Self::Output> {
-                let mut output = self.space.differentiate(&self.vhat, deriv[0], 0);
-                if let Some(s) = scale {
-                    let scale_1: $a = (s[0].powi(deriv[0] as i32)).into();
-                    output /= scale_1;
-                }
-                output
+            // #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+            fn grad(
+                &self,
+                deriv: [usize; $n],
+                scale: Option<[T; $n]>,
+            ) -> Array<$a, Dim<[usize; $n]>> {
+                self.space.gradient(&self.vhat, deriv, scale)
             }
         }
     };
 }
 // Float
-impl_field1!(T);
+impl_space_functions!(T, 1);
+impl_space_functions!(T, 2);
 // Complex
-impl_field1!(Complex<T>);
+impl_space_functions!(Complex<T>, 1);
+impl_space_functions!(Complex<T>, 2);
 
-macro_rules! impl_field2 {
-    ($a: ty) => {
-        impl<T> Field<T, $a, 2> for FieldBase<T, $a, 2>
-        where
-            T: FloatNum,
-            $a: std::ops::DivAssign,
-            Complex<T>: ScalarOperand,
-        {
-            type Output = $a;
-            /// Forward transform 1d
-            fn forward(&mut self) {
-                let mut buffer = self.space.forward_par(&mut self.v, 1);
-                self.space
-                    .forward_inplace_par(&mut buffer, &mut self.vhat, 0);
-            }
+// macro_rules! impl_field1 {
+//     ($a: ty) => {
+//         impl<T> Field<T, $a, 1> for FieldBase<T, $a, 1>
+//         where
+//             T: FloatNum,
+//             $a: std::ops::DivAssign,
+//             Complex<T>: ScalarOperand,
+//         {
+//             type Output = $a;
+//             /// Forward transform 1d
+//             fn forward(&mut self) {
+//                 self.space
+//                     .forward_inplace_par(&mut self.v, &mut self.vhat, 0);
+//             }
 
-            /// Backward transform 1d
-            fn backward(&mut self) {
-                let mut buffer = self.space.backward_par(&mut self.vhat, 0);
-                self.space.backward_inplace_par(&mut buffer, &mut self.v, 1);
-            }
+//             /// Backward transform 1d
+//             fn backward(&mut self) {
+//                 self.space
+//                     .backward_inplace_par(&mut self.vhat, &mut self.v, 0);
+//             }
 
-            /// Transform to parent space
-            fn to_ortho(&self) -> Array2<Self::Output> {
-                let buffer = self.space.to_ortho(&self.vhat, 1);
-                self.space.to_ortho(&buffer, 0)
-            }
+//             /// Transform to parent space
+//             fn to_ortho(&self) -> Array1<Self::Output> {
+//                 self.space.to_ortho(&self.vhat, 0)
+//             }
 
-            /// Transform to child space
-            fn from_ortho(&mut self, input: &Array2<Self::Output>) {
-                let buffer = self.space.from_ortho(input, 1);
-                self.vhat.assign(&self.space.from_ortho(&buffer, 0));
-            }
+//             /// Transform to child space
+//             fn from_ortho(&mut self, input: &Array1<Self::Output>) {
+//                 self.vhat.assign(&self.space.from_ortho(input, 0));
+//             }
 
-            /// Gradient
-            #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
-            fn grad(&self, deriv: [usize; 2], scale: Option<[T; 2]>) -> Array2<Self::Output> {
-                let buffer = self.space.differentiate(&self.vhat, deriv[0], 0);
-                let mut output = self.space.differentiate(&buffer, deriv[1], 1);
-                if let Some(s) = scale {
-                    let scale_1: $a = (s[0].powi(deriv[0] as i32)).into();
-                    let scale_2: $a = (s[1].powi(deriv[0] as i32)).into();
-                    output /= scale_1;
-                    output /= scale_2;
-                }
-                output
-            }
-        }
-    };
-}
+//             /// Gradient
+//             #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+//             fn grad(&self, deriv: [usize; 1], scale: Option<[T; 1]>) -> Array1<Self::Output> {
+//                 let mut output = self.space.differentiate(&self.vhat, deriv[0], 0);
+//                 if let Some(s) = scale {
+//                     let scale_1: $a = (s[0].powi(deriv[0] as i32)).into();
+//                     output /= scale_1;
+//                 }
+//                 output
+//             }
+//         }
+//     };
+// }
+// // Float
+// impl_field1!(T);
+// // Complex
+// impl_field1!(Complex<T>);
 
-// Float
-impl_field2!(T);
-// Complex
-impl_field2!(Complex<T>);
+// macro_rules! impl_field2 {
+//     ($a: ty) => {
+//         impl<T> Field<T, $a, 2> for FieldBase<T, $a, 2>
+//         where
+//             T: FloatNum,
+//             $a: std::ops::DivAssign,
+//             Complex<T>: ScalarOperand,
+//         {
+//             type Output = $a;
+//             /// Forward transform 1d
+//             fn forward(&mut self) {
+//                 let mut buffer = self.space.forward_par(&mut self.v, 1);
+//                 self.space
+//                     .forward_inplace_par(&mut buffer, &mut self.vhat, 0);
+//             }
+
+//             /// Backward transform 1d
+//             fn backward(&mut self) {
+//                 let mut buffer = self.space.backward_par(&mut self.vhat, 0);
+//                 self.space.backward_inplace_par(&mut buffer, &mut self.v, 1);
+//             }
+
+//             /// Transform to parent space
+//             fn to_ortho(&self) -> Array2<Self::Output> {
+//                 let buffer = self.space.to_ortho(&self.vhat, 1);
+//                 self.space.to_ortho(&buffer, 0)
+//             }
+
+//             /// Transform to child space
+//             fn from_ortho(&mut self, input: &Array2<Self::Output>) {
+//                 let buffer = self.space.from_ortho(input, 1);
+//                 self.vhat.assign(&self.space.from_ortho(&buffer, 0));
+//             }
+
+//             /// Gradient
+//             #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+//             fn grad(&self, deriv: [usize; 2], scale: Option<[T; 2]>) -> Array2<Self::Output> {
+//                 let buffer = self.space.differentiate(&self.vhat, deriv[0], 0);
+//                 let mut output = self.space.differentiate(&buffer, deriv[1], 1);
+//                 if let Some(s) = scale {
+//                     let scale_1: $a = (s[0].powi(deriv[0] as i32)).into();
+//                     let scale_2: $a = (s[1].powi(deriv[0] as i32)).into();
+//                     output /= scale_1;
+//                     output /= scale_2;
+//                 }
+//                 output
+//             }
+//         }
+//     };
+// }
+
+// // Float
+// impl_field2!(T);
+// // Complex
+// impl_field2!(Complex<T>);

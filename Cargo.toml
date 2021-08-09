@@ -6,7 +6,7 @@ edition = "2018"
 description = "N-dimensional spectral transforms of various basis functions"
 
 [dependencies]
-ndarray = { version = "0.15", features = ["rayon"] }
+ndarray = { version = "0.15.0", features=["rayon"]}
 ndarray-linalg = { version = "0.14", features = ["openblas-static"] }
 enum_dispatch = "0.3.7"
 num-traits = "0.2.12"
@@ -14,6 +14,7 @@ num-complex = "0.4"
 hdf5-interface = { git = "https://github.com/preiter93/hdf5-interface", branch = "master" }
 # funspace = "0.1.0"
 # funspace = {path = "funspace", version = "0.1"}
+# funspace = {path = "../funspace", version = "0.1"}
 funspace = { git = "https://github.com/preiter93/funspace", branch = "main" }
 
 [dev-dependencies]
@@ -23,13 +24,17 @@ criterion = { version = "0.3", features = ["html_reports"] }
 name = "rustpde"
 path = "src/lib.rs"
 
-[[bench]]
-name = "benchmark_transform"
-harness = false
+#[[bench]]
+#name = "benchmark_transform"
+#harness = false
 
-[[bench]]
-name = "benchmark_diffusion"
-harness = false
+#[[bench]]
+#name = "benchmark_to_ortho"
+#harness = false
+
+#[[bench]]
+#name = "benchmark_diffusion"
+#harness = false
 
 [[bench]]
 name = "benchmark_navier"
