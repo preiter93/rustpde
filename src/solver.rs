@@ -27,10 +27,11 @@ pub trait SolverScalar:
     + std::ops::DivAssign
     + From<f64>
     + num_traits::Zero
-    + num_traits::Zero
     + std::marker::Copy
     + std::ops::Div
     + std::ops::Sub
+    + std::marker::Send
+    + std::marker::Sync
 {
 }
 impl<T> SolverScalar for T where
@@ -43,6 +44,8 @@ impl<T> SolverScalar for T where
         + std::marker::Copy
         + std::ops::Div
         + std::ops::Sub
+        + std::marker::Send
+        + std::marker::Sync
 {
 }
 

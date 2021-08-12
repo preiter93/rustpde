@@ -95,23 +95,18 @@
 #[macro_use]
 extern crate enum_dispatch;
 pub mod bases;
-// pub mod field;
 pub mod examples;
 pub mod field;
 pub mod hdf5;
 pub mod solver;
-pub mod space;
 pub mod types;
 pub use bases::{cheb_dirichlet, cheb_neumann, chebyshev, fourier_c2c, fourier_r2c};
-pub use bases::{Base, Differentiate, Transform};
-pub use field::{
-    Field, Field1, Field1Complex, Field2, Field2Complex, FieldBase, ReadField, WriteField,
-};
+pub use field::{BaseSpace, Field1, Field2, ReadField, Space1, Space2, WriteField};
+pub use field::{Field1Complex, Field2Complex, FieldBase, FieldReal1, FieldReal2};
 pub use solver::{Solver, SolverField, SolverScalar};
-//pub use space::{Space, Space1, Space2, Spaced};
 
 /// Real type (not active)
-pub type Real = f64;
+//pub type Real = f64;
 
 const MAX_TIMESTEP: usize = 10_000_000;
 
@@ -123,8 +118,8 @@ pub trait Integrate {
     fn get_time(&self) -> f64;
     /// Get timestep
     fn get_dt(&self) -> f64;
-    /// Write results (can be used as callback)
-    fn write(&mut self);
+    /// Callback function (can be used for i/o)
+    fn callback(&mut self);
     /// Additional break criteria
     fn exit(&mut self) -> bool;
 }
@@ -150,7 +145,7 @@ pub fn integrate<T: Integrate>(pde: &mut T, max_time: f64, save_intervall: Optio
                 || (pde.get_time() % dt_save) > dt_save - pde.get_dt() / 2.
             {
                 //println!("Save at time: {:4.3}", pde.get_time());
-                pde.write();
+                pde.callback();
             }
         }
 

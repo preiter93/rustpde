@@ -19,14 +19,13 @@
 //! banded after multiplication with the pseudoinverse
 //! of D2 (B2). In this case, the second equation is
 //! solved, with A = B2.
-use super::{MatVec, Solver, SolverScalar};
-use crate::bases::BaseBasics;
-use crate::bases::LaplacianInverse;
-use crate::bases::SpaceBase;
-use crate::solver::{Solve, SolveReturn};
-use crate::Base;
+use super::{MatVec, MatVecFdma, Solver, SolverScalar};
+use crate::bases::BaseSpace;
+use crate::field::FieldBase;
+use crate::solver::{Fdma, Solve, SolveReturn};
 use ndarray::prelude::*;
 use ndarray::{Data, DataMut};
+use std::ops::{Add, Div, Mul};
 
 /// Container for Hholtz
 #[derive(Clone)]
@@ -38,82 +37,94 @@ pub struct Hholtz<T, const N: usize>
     matvec: Vec<Option<MatVec<T>>>,
 }
 
-impl<const N: usize> Hholtz<f64, N>
-// where
-//     T: SolverScalar + ndarray::ScalarOperand,
-//     f64: Into<T>,
-{
-    // /// Construct Helmholtz solver from field
-    // pub fn from_field<S>(field: &Field<S, T, N>, c: [f64; N]) -> Self
-    // where
-    //     S: Spaced<T, N>,
-    // {
-    //     Self::from_space(&field.space, c)
+impl<const N: usize> Hholtz<f64, N> {
+    /// Construct Helmholtz solver from field:
+    ///
+    ///  (I-c*D2) vhat = A f
+    pub fn new<T2, S>(field: &FieldBase<f64, f64, T2, S, N>, c: [f64; N]) -> Self
+    where
+        S: BaseSpace<f64, N, Physical = f64, Spectral = T2>,
+    {
+        // Gather matrices and preconditioner
+        let mut solver: Vec<Solver<f64>> = Vec::new();
+        let mut matvec: Vec<Option<MatVec<f64>>> = Vec::new();
+        for axis in 0..N {
+            // Matrices and preconditioner
+            let (mat_a, mat_b, precond) = field.ingredients_for_hholtz(axis);
+            let mat: Array2<f64> = mat_a - mat_b * c[axis];
+            let solver_axis = Solver::Fdma(Fdma::from_matrix(&mat));
+            let matvec_axis = if let Some(x) = precond {
+                Some(MatVec::MatVecFdma(MatVecFdma::new(&x)))
+            } else {
+                None
+            };
+
+            solver.push(solver_axis);
+            matvec.push(matvec_axis);
+        }
+
+        Self { solver, matvec }
+    }
+
+    // /// Construct Helmholtz solver from space
+    // pub fn from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Self {
+    //     let solver: Vec<Solver<f64>> = space
+    //         .bases
+    //         .iter()
+    //         .enumerate()
+    //         .map(|(i, base)| Self::solver_from_base(base, c[i]))
+    //         .collect();
+
+    //     let matvec: Vec<Option<MatVec<f64>>> = space
+    //         .bases
+    //         .iter()
+    //         .map(|base| Self::matvec_from_base(base))
+    //         .collect();
+
+    //     Hholtz { solver, matvec }
     // }
 
-    /// Construct Helmholtz solver from space
-    pub fn from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Self {
-        let solver: Vec<Solver<f64>> = space
-            .bases
-            .iter()
-            .enumerate()
-            .map(|(i, base)| Self::solver_from_base(base, c[i]))
-            .collect();
+    // /// Returns the solver for the lhs, depending on the base
+    // fn solver_from_base(base: &Base<f64>, c: f64) -> Solver<f64> {
+    //     let mass = base.mass();
+    //     let lap = base.laplace();
+    //     let peye = base.laplace_inv_eye();
+    //     let pinv = peye.dot(&base.laplace_inv());
 
-        let matvec: Vec<Option<MatVec<f64>>> = space
-            .bases
-            .iter()
-            .map(|base| Self::matvec_from_base(base))
-            .collect();
+    //     let mat = match base {
+    //         Base::Chebyshev(_) => {
+    //             let mass_sliced = mass.slice(s![.., 2..]);
+    //             pinv.dot(&mass_sliced) - peye.dot(&mass_sliced) * c
+    //         }
+    //         Base::CompositeChebyshev(_) => pinv.dot(&mass) - peye.dot(&mass) * c,
+    //         Base::FourierC2c(_) | Base::FourierR2c(_) => mass - lap * c,
+    //     };
+    //     Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
+    // }
 
-        Hholtz { solver, matvec }
-    }
-
-    /// Returns the solver for the lhs, depending on the base
-    fn solver_from_base(base: &Base<f64>, c: f64) -> Solver<f64> {
-        let mass = base.mass();
-        let lap = base.laplace();
-        let peye = base.laplace_inv_eye();
-        let pinv = peye.dot(&base.laplace_inv());
-
-        let mat = match base {
-            Base::Chebyshev(_) => {
-                let mass_sliced = mass.slice(s![.., 2..]);
-                pinv.dot(&mass_sliced) - peye.dot(&mass_sliced) * c
-            }
-            Base::CompositeChebyshev(_) => pinv.dot(&mass) - peye.dot(&mass) * c,
-            Base::FourierC2c(_) | Base::FourierR2c(_) => mass - lap * c,
-        };
-        Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
-    }
-
-    /// Returns the solver for the rhs, depending on the base
-    #[allow(clippy::unnecessary_wraps)]
-    fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<f64>> {
-        use crate::solver::MatVecFdma;
-        match base {
-            Base::Chebyshev(_) | Base::CompositeChebyshev(_) => {
-                let peye = base.laplace_inv_eye();
-                let pinv = base.laplace_inv();
-                //let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
-                let mat = peye.dot(&pinv);
-                let matvec = MatVec::MatVecFdma(MatVecFdma::new(&mat));
-                Some(matvec)
-            }
-            Base::FourierC2c(_) | Base::FourierR2c(_) => None,
-        }
-    }
+    // /// Returns the solver for the rhs, depending on the base
+    // #[allow(clippy::unnecessary_wraps)]
+    // fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<f64>> {
+    //     use crate::solver::MatVecFdma;
+    //     match base {
+    //         Base::Chebyshev(_) | Base::CompositeChebyshev(_) => {
+    //             let peye = base.laplace_inv_eye();
+    //             let pinv = base.laplace_inv();
+    //             //let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
+    //             let mat = peye.dot(&pinv);
+    //             let matvec = MatVec::MatVecFdma(MatVecFdma::new(&mat));
+    //             Some(matvec)
+    //         }
+    //         Base::FourierC2c(_) | Base::FourierR2c(_) => None,
+    //     }
+    // }
 }
 
 #[allow(unused_variables)]
 impl<T, A> Solve<A, ndarray::Ix1> for Hholtz<T, 1>
 where
     T: SolverScalar,
-    A: SolverScalar
-        + std::ops::Div<T, Output = A>
-        + std::ops::Mul<T, Output = A>
-        + std::ops::Add<T, Output = A>
-        + From<T>,
+    A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A> + From<T>,
 {
     /// # Example
     fn solve<S1, S2>(
@@ -138,11 +149,7 @@ where
 impl<T, A> Solve<A, ndarray::Ix2> for Hholtz<T, 2>
 where
     T: SolverScalar,
-    A: SolverScalar
-        + std::ops::Div<T, Output = A>
-        + std::ops::Mul<T, Output = A>
-        + std::ops::Add<T, Output = A>
-        + From<T>,
+    A: SolverScalar + Div<T, Output = A> + Mul<T, Output = A> + Add<T, Output = A> + From<T>,
 {
     /// # Example
     fn solve<S1, S2>(
@@ -183,8 +190,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bases::BaseBasics;
-    use crate::field::{Field, Field1, Field2, Field2Complex};
+    use crate::field::{Field1, Field2, Space1, Space2};
     use crate::{cheb_dirichlet, fourier_r2c};
     use ndarray::array;
 
@@ -204,9 +210,9 @@ mod tests {
     #[test]
     fn test_hholtz() {
         let nx = 7;
-        let bases = [cheb_dirichlet(nx)];
-        let field = Field1::new(&bases);
-        let hholtz = Hholtz::from_space(&field.space, [1.0]);
+        let space = Space1::new(&cheb_dirichlet(nx));
+        let field = Field1::new(&space);
+        let hholtz = Hholtz::new(&field, [1.0]);
         let b: Array1<f64> = array![1., 2., 3., 4., 5., 6., 7.];
         let mut x = Array1::<f64>::zeros(nx - 2);
         // Solve Hholtz
@@ -226,9 +232,11 @@ mod tests {
     #[test]
     fn test_hholtz2d() {
         let nx = 7;
-        let bases = [cheb_dirichlet(nx), cheb_dirichlet(nx)];
-        let field = Field2::new(&bases);
-        let hholtz = Hholtz::from_space(&field.space, [1.0, 1.0]);
+
+        let space = Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(nx));
+        let field = Field2::new(&space);
+
+        let hholtz = Hholtz::new(&field, [1.0, 1.0]);
         let b: Array2<f64> = array![
             [1., 2., 3., 4., 5., 6., 7.],
             [1., 2., 3., 4., 5., 6., 7.],
@@ -259,12 +267,12 @@ mod tests {
     fn test_hholtz2d_cd_cd() {
         // Init
         let (nx, ny) = (16, 7);
-        let bases = [cheb_dirichlet::<f64>(nx), cheb_dirichlet::<f64>(ny)];
-        let mut field = Field2::new(&bases);
+        let space = Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(ny));
+        let mut field = Field2::new(&space);
         let alpha = 1e-5;
-        let hholtz = Hholtz::from_space(&field.space, [alpha, alpha]);
-        let x = bases[0].coords();
-        let y = bases[1].coords();
+        let hholtz = Hholtz::new(&field, [alpha, alpha]);
+        let x = &field.x[0];
+        let y = &field.x[1];
 
         // Analytical field and solution
         let n = std::f64::consts::PI / 2.;
@@ -290,12 +298,12 @@ mod tests {
     fn test_hholtz2d_fo_cd() {
         // Init
         let (nx, ny) = (16, 7);
-        let bases = [fourier_r2c::<f64>(nx), cheb_dirichlet::<f64>(ny)];
-        let mut field = Field2Complex::new(&bases);
+        let space = Space2::new(&fourier_r2c(nx), &cheb_dirichlet(ny));
+        let mut field = Field2::new(&space);
         let alpha = 1e-5;
-        let hholtz = Hholtz::from_space(&field.space, [alpha, alpha]);
-        let x = bases[0].coords();
-        let y = bases[1].coords();
+        let hholtz = Hholtz::new(&field, [alpha, alpha]);
+        let x = &field.x[0];
+        let y = &field.x[1];
 
         // Analytical field and solution
         let n = std::f64::consts::PI / 2.;

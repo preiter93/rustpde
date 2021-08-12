@@ -2,8 +2,8 @@ use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
 use rustpde::cheb_dirichlet;
 use rustpde::examples::diffusion::Diffusion2D;
-use rustpde::Field2;
 use rustpde::Integrate;
+use rustpde::{Field2, Space2};
 
 const SIZES: [usize; 4] = [128, 264, 512, 1024];
 
@@ -27,7 +27,8 @@ pub fn bench_diffusion(c: &mut Criterion) {
     for n in SIZES.iter() {
         let cdx = cheb_dirichlet::<f64>(*n);
         let cdy = cheb_dirichlet::<f64>(*n);
-        let field = Field2::new(&[cdx, cdy]);
+        let space = Space2::new(&cdx, &cdy);
+        let field = Field2::new(&space);
         let mut diff = Diffusion2D::new(field, 1.0, 0.1);
         diff.impulse();
 

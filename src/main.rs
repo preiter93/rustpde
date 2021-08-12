@@ -1,59 +1,64 @@
-#![allow(unused_imports)]
-use ndarray::Array2;
-use ndarray::ArrayBase;
-use ndarray::Data;
-use ndarray::Dimension;
-use num_complex::Complex;
-use rustpde::bases::BaseBasics;
-use rustpde::cheb_dirichlet;
-use rustpde::chebyshev;
-use rustpde::fourier_c2c;
-use rustpde::fourier_r2c;
-use rustpde::solver::Solve;
-use std::f64::consts::PI;
+//#![allow(unused_imports)]
+// use ndarray::Array2;
+// use ndarray::ArrayBase;
+// use ndarray::Data;
+// use ndarray::Dimension;
+// use num_complex::Complex;
+// use rustpde::cheb_dirichlet;
+// use rustpde::chebyshev;
+// use rustpde::fourier_c2c;
+// use rustpde::fourier_r2c;
+// use rustpde::solver::Solve;
+// use std::f64::consts::PI;
 //use rustpde::Field2;
-use rustpde::examples::diffusion::Diffusion2D;
-use rustpde::examples::solid_masks::solid_cylinder_inner;
+//use rustpde::examples::diffusion::Diffusion2D;
+//use rustpde::examples::solid_masks::solid_cylinder_inner;
 use rustpde::examples::Navier2D;
-use rustpde::examples::Navier2DPeriodic;
-use rustpde::field::Field;
-use rustpde::field::Field1Complex;
-use rustpde::field::Field2Complex;
-use rustpde::hdf5::write_to_hdf5;
+//use rustpde::hdf5::write_to_hdf5;
 use rustpde::integrate;
-use rustpde::solver::Hholtz;
-use rustpde::solver::Poisson;
-use rustpde::Field2;
+// use rustpde::solver::Hholtz;
+// use rustpde::solver::Poisson;
+// use rustpde::Field2;
 use rustpde::Integrate;
 
 #[allow(dead_code)]
 fn main() {
     // Parameters
-    let (nx, ny) = (256, 129);
-    let ra = 1e7;
+    let (nx, ny) = (64, 64);
+    let ra = 1e4;
     let pr = 1.;
-    //let adiabatic = true;
+    let adiabatic = true;
     let aspect = 1.0;
-    let dt = 0.002;
+    let dt = 0.01;
     //let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
-    let mut navier = Navier2DPeriodic::new(nx, ny, ra, pr, dt, aspect);
-    // Set mask
-    //let mask = solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 0.2, 0.0, 0.2);
-    //navier.solid = Some(mask);
-    //navier.read("restart.h5");
-    navier.write();
+    let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
+    navier.callback();
+    integrate(&mut navier, 2.0, Some(0.50));
+    // // Set mask
+    // let mut mask = solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 0.5, 0.0, 0.2);
+    // mask = mask + solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 1.5, 0.0, 0.2);
+    // mask = mask + solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 2.5, 0.0, 0.2);
+    // mask = mask + solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 3.5, 0.0, 0.2);
+    // mask = mask + solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 4.5, 0.0, 0.2);
+    // mask = mask + solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 5.5, 0.0, 0.2);
+    // navier.solid = Some(mask);
+    //navier.read("data/flow200.000.h5");
+    //navier.write();
     // write_to_hdf5("data/solid.h5", "v", None, &navier.solid.as_ref().unwrap()).unwrap();
     // write_to_hdf5("data/solid.h5", "x", None, &navier.temp.x[0]).unwrap();
     // write_to_hdf5("data/solid.h5", "y", None, &navier.temp.x[1]).unwrap();
     // Solve
-    integrate(&mut navier, 100.0, Some(0.50));
-
-    // let (nx, ny) = (26, 26);
-    // let mut navier_1 = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
-    // let shape_0 = navier.temp.shape();
-    // let shape_1 = navier_1.temp.shape();
+    //integrate(&mut navier, 2.0, Some(0.50));
 }
 
+// let (nx, ny) = (26, 26);
+// let mut navier_1 = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
+// let shape_0 = navier.temp.shape();
+// let shape_1 = navier_1.temp.shape();
+// }
+// pub fn main() {
+//     println!("Hello World.");
+// }
 /*
 pub fn main() {
     let n = 1024;

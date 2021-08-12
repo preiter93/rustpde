@@ -24,13 +24,13 @@ criterion = { version = "0.3", features = ["html_reports"] }
 name = "rustpde"
 path = "src/lib.rs"
 
-#[[bench]]
-#name = "benchmark_transform"
-#harness = false
+[[bench]]
+name = "benchmark_transform"
+harness = false
 
-#[[bench]]
-#name = "benchmark_to_ortho"
-#harness = false
+[[bench]]
+name = "benchmark_to_ortho"
+harness = false
 
 #[[bench]]
 #name = "benchmark_diffusion"

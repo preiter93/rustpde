@@ -206,15 +206,13 @@ where
         }
 
         // Step 2: Solve along y (but iterate over all lanes in x)
-        let mut helper = Array1::<S>::zeros(output.shape()[1]);
         Zip::from(output.outer_iter_mut())
             .and(self.lam[0].outer_iter())
-            .for_each(|mut out, lam| {
+            .par_for_each(|mut out, lam| {
                 let l = lam.as_slice().unwrap()[0];
                 let mut fdma = &self.fdma[0] + &(&self.fdma[1] * l);
                 fdma.sweep();
-                helper.assign(&out);
-                fdma.solve(&helper, &mut out, 0);
+                fdma.solve(&out.to_owned(), &mut out, 0);
             });
 
         // Step 3: Backward Transform solution along x
