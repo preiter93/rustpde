@@ -22,15 +22,15 @@
 //! ## Implemented solver
 //!
 //! - `2-D Rayleigh Benard Convection: Direct numerical simulation`,
-//! see [`integrate::navier`]
+//! see [`examples::navier`]
 //! - `2-D Rayleigh Benard Convection: Steady state solver`,
-//! see [`integrate::navier_adjoint`]
+//! see [`examples::navier_adjoint`]
 //!
 //! # Example
 //! Solve 2-D Rayleigh Benard Convection ( Run with `cargo run --release` )
 //! ```ignore
 //! use rustpde::integrate;
-//! use rustpde::integrate::Navier2D;
+//! use rustpde::examples::Navier2D;
 //! use rustpde::Integrate;
 //!
 //! fn main() {
@@ -101,8 +101,7 @@ pub mod hdf5;
 pub mod solver;
 pub mod types;
 pub use bases::{cheb_dirichlet, cheb_neumann, chebyshev, fourier_c2c, fourier_r2c};
-pub use field::{BaseSpace, Field1, Field2, ReadField, Space1, Space2, WriteField};
-pub use field::{Field1Complex, Field2Complex, FieldBase, FieldReal1, FieldReal2};
+pub use field::{BaseSpace, Field1, Field2, FieldBase, ReadField, Space1, Space2, WriteField};
 pub use solver::{Solver, SolverField, SolverScalar};
 
 /// Real type (not active)

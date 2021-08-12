@@ -17,18 +17,11 @@ pub use read::ReadField;
 use std::convert::TryInto;
 pub use write::WriteField;
 
-/// One dimensional Field
+/// One dimensional Field (Real in Physical space, Generic in Spectral Space)
 pub type Field1<T2, S> = FieldBase<f64, f64, T2, S, 1>;
-/// One dimensional Field (Spectral Space is Real)
-pub type FieldReal1<S> = FieldBase<f64, f64, f64, S, 1>;
-/// One dimensional Field (Spectral Space is Complex)
-pub type Field1Complex<S> = FieldBase<f64, f64, Complex<f64>, S, 1>;
-/// Two dimensional Field
+
+/// Two dimensional Field (Real in Physical space, Generic in Spectral Space)
 pub type Field2<T2, S> = FieldBase<f64, f64, T2, S, 2>;
-/// Two dimensional Field (Spectral Space is Real)
-pub type FieldReal2<S> = FieldBase<f64, f64, f64, S, 2>;
-/// Two dimensional Field (Spectral Space is Complex)
-pub type Field2Complex<S> = FieldBase<f64, f64, Complex<f64>, S, 2>;
 
 /// Field struct is rustpdes backbone
 ///
