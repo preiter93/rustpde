@@ -48,16 +48,12 @@ impl<const N: usize> Hholtz<f64, N> {
         // Gather matrices and preconditioner
         let mut solver: Vec<Solver<f64>> = Vec::new();
         let mut matvec: Vec<Option<MatVec<f64>>> = Vec::new();
-        for axis in 0..N {
+        for (axis, ci) in c.iter().enumerate() {
             // Matrices and preconditioner
             let (mat_a, mat_b, precond) = field.ingredients_for_hholtz(axis);
-            let mat: Array2<f64> = mat_a - mat_b * c[axis];
+            let mat: Array2<f64> = mat_a - mat_b * *ci;
             let solver_axis = Solver::Fdma(Fdma::from_matrix(&mat));
-            let matvec_axis = if let Some(x) = precond {
-                Some(MatVec::MatVecFdma(MatVecFdma::new(&x)))
-            } else {
-                None
-            };
+            let matvec_axis = precond.map(|x| MatVec::MatVecFdma(MatVecFdma::new(&x)));
 
             solver.push(solver_axis);
             matvec.push(matvec_axis);
@@ -65,59 +61,6 @@ impl<const N: usize> Hholtz<f64, N> {
 
         Self { solver, matvec }
     }
-
-    // /// Construct Helmholtz solver from space
-    // pub fn from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Self {
-    //     let solver: Vec<Solver<f64>> = space
-    //         .bases
-    //         .iter()
-    //         .enumerate()
-    //         .map(|(i, base)| Self::solver_from_base(base, c[i]))
-    //         .collect();
-
-    //     let matvec: Vec<Option<MatVec<f64>>> = space
-    //         .bases
-    //         .iter()
-    //         .map(|base| Self::matvec_from_base(base))
-    //         .collect();
-
-    //     Hholtz { solver, matvec }
-    // }
-
-    // /// Returns the solver for the lhs, depending on the base
-    // fn solver_from_base(base: &Base<f64>, c: f64) -> Solver<f64> {
-    //     let mass = base.mass();
-    //     let lap = base.laplace();
-    //     let peye = base.laplace_inv_eye();
-    //     let pinv = peye.dot(&base.laplace_inv());
-
-    //     let mat = match base {
-    //         Base::Chebyshev(_) => {
-    //             let mass_sliced = mass.slice(s![.., 2..]);
-    //             pinv.dot(&mass_sliced) - peye.dot(&mass_sliced) * c
-    //         }
-    //         Base::CompositeChebyshev(_) => pinv.dot(&mass) - peye.dot(&mass) * c,
-    //         Base::FourierC2c(_) | Base::FourierR2c(_) => mass - lap * c,
-    //     };
-    //     Solver::Fdma(crate::solver::Fdma::from_matrix(&mat))
-    // }
-
-    // /// Returns the solver for the rhs, depending on the base
-    // #[allow(clippy::unnecessary_wraps)]
-    // fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<f64>> {
-    //     use crate::solver::MatVecFdma;
-    //     match base {
-    //         Base::Chebyshev(_) | Base::CompositeChebyshev(_) => {
-    //             let peye = base.laplace_inv_eye();
-    //             let pinv = base.laplace_inv();
-    //             //let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
-    //             let mat = peye.dot(&pinv);
-    //             let matvec = MatVec::MatVecFdma(MatVecFdma::new(&mat));
-    //             Some(matvec)
-    //         }
-    //         Base::FourierC2c(_) | Base::FourierR2c(_) => None,
-    //     }
-    // }
 }
 
 #[allow(unused_variables)]
@@ -162,24 +105,24 @@ where
         S2: Data<Elem = A> + DataMut,
     {
         // Matvec
-        // let mut rhs = self.matvec[0]
-        //     .as_ref()
-        //     .map_or_else(|| input.to_owned(), |x| x.solve(input, 0));
-        // if let Some(x) = &self.matvec[1] {
-        //     rhs = x.solve(&rhs, 1);
-        // }
+        let mut rhs = self.matvec[0]
+            .as_ref()
+            .map_or_else(|| input.to_owned(), |x| x.solve(input, 0));
+        if let Some(x) = &self.matvec[1] {
+            rhs = x.solve(&rhs, 1);
+        }
 
-        // Matvec
-        let rhs = if let Some(x) = &self.matvec[0] {
-            x.solve(&input, 0)
-        } else {
-            input.to_owned()
-        };
-        let rhs = if let Some(x) = &self.matvec[1] {
-            x.solve(&rhs, 1)
-        } else {
-            rhs
-        };
+        // // Matvec
+        // let rhs = if let Some(x) = &self.matvec[0] {
+        //     x.solve(&input, 0)
+        // } else {
+        //     input.to_owned()
+        // };
+        // let rhs = if let Some(x) = &self.matvec[1] {
+        //     x.solve(&rhs, 1)
+        // } else {
+        //     rhs
+        // };
 
         // Solve
         self.solver[0].solve(&rhs, output, 0);

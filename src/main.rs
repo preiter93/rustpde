@@ -21,8 +21,37 @@ use rustpde::integrate;
 // use rustpde::Field2;
 use rustpde::Integrate;
 
-#[allow(dead_code)]
 fn main() {
+    // Parameters
+    let (nx, ny) = (64, 64);
+    let ra = 1e4;
+    let pr = 1.;
+    let adiabatic = true;
+    let aspect = 1.0;
+    let dt = 0.01;
+    //let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
+    let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
+    navier.callback();
+    integrate(&mut navier, 2.0, Some(0.50));
+    // // Set mask
+    // let mut mask = solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 0.5, 0.0, 0.2);
+    // mask = mask + solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 1.5, 0.0, 0.2);
+    // mask = mask + solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 2.5, 0.0, 0.2);
+    // mask = mask + solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 3.5, 0.0, 0.2);
+    // mask = mask + solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 4.5, 0.0, 0.2);
+    // mask = mask + solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], 5.5, 0.0, 0.2);
+    // navier.solid = Some(mask);
+    //navier.read("data/flow200.000.h5");
+    //navier.write();
+    // write_to_hdf5("data/solid.h5", "v", None, &navier.solid.as_ref().unwrap()).unwrap();
+    // write_to_hdf5("data/solid.h5", "x", None, &navier.temp.x[0]).unwrap();
+    // write_to_hdf5("data/solid.h5", "y", None, &navier.temp.x[1]).unwrap();
+    // Solve
+    //integrate(&mut navier, 2.0, Some(0.50));
+}
+
+#[allow(dead_code)]
+fn abc() {
     // Parameters
     let (nx, ny) = (64, 64);
     let ra = 1e4;

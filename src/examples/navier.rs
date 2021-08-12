@@ -27,6 +27,7 @@
 //! }
 //! ```
 use super::conv_term;
+use crate::bases::fourier_r2c;
 use crate::bases::{cheb_dirichlet, cheb_dirichlet_bc, cheb_neumann, chebyshev};
 use crate::bases::{BaseR2c, BaseR2r};
 use crate::field::{BaseSpace, Field2, ReadField, Space2, WriteField};
@@ -208,6 +209,7 @@ impl Navier2D<f64, Space2R2r>
     /// * `adiabatic` - Boolean, sidewall temperature boundary condition
     ///
     /// * `aspect` - Aspect ratio L/H
+    #[allow(clippy::similar_names)]
     pub fn new(
         nx: usize,
         ny: usize,
@@ -303,9 +305,9 @@ impl Navier2D<f64, Space2R2r>
     pub fn bc_rbc(nx: usize, ny: usize) -> Field2<f64, Space2R2r> {
         use crate::bases::Transform;
         // Create base and field
-        let mut xbase = chebyshev(nx);
-        let ybase = cheb_dirichlet_bc(ny);
-        let space = Space2::new(&xbase, &ybase);
+        let mut x_base = chebyshev(nx);
+        let y_base = cheb_dirichlet_bc(ny);
+        let space = Space2::new(&x_base, &y_base);
         let mut fieldbc = Field2::new(&space);
         let mut bc = fieldbc.vhat.to_owned();
 
@@ -314,7 +316,7 @@ impl Navier2D<f64, Space2R2r>
         bc.slice_mut(s![.., 1]).fill(-0.5);
 
         // Transform
-        xbase.forward_inplace(&mut bc, &mut fieldbc.vhat, 0);
+        x_base.forward_inplace(&mut bc, &mut fieldbc.vhat, 0);
         fieldbc.backward();
         fieldbc.forward();
         fieldbc
@@ -331,9 +333,9 @@ impl Navier2D<f64, Space2R2r>
     pub fn bc_zero(nx: usize, ny: usize, k: f64) -> Field2<f64, Space2R2r> {
         use crate::bases::Transform;
         // Create base and field
-        let xbase = cheb_dirichlet_bc(ny);
-        let mut ybase = chebyshev(nx);
-        let space = Space2::new(&xbase, &ybase);
+        let x_base = cheb_dirichlet_bc(ny);
+        let mut y_base = chebyshev(nx);
+        let space = Space2::new(&x_base, &y_base);
         let mut fieldbc = Field2::new(&space);
         let mut bc = fieldbc.vhat.to_owned();
         // Sidewall temp function
@@ -343,7 +345,135 @@ impl Navier2D<f64, Space2R2r>
         bc.slice_mut(s![1, ..]).assign(&transfer);
 
         // Transform
-        ybase.forward_inplace(&mut bc, &mut fieldbc.vhat, 1);
+        y_base.forward_inplace(&mut bc, &mut fieldbc.vhat, 1);
+        fieldbc.backward();
+        fieldbc.forward();
+        fieldbc
+    }
+}
+
+impl Navier2D<Complex<f64>, Space2R2c>
+//where
+//    S: BaseSpace<f64, 2, Physical = f64, Spectral = f64>,
+{
+    /// Bases: Fourier in x and chebyshev in y
+    ///
+    /// Struct must be mutable, to perform the
+    /// update step, which advances the solution
+    /// by 1 timestep.
+    ///
+    /// # Arguments
+    ///
+    /// * `nx,ny` - The number of modes in x and y -direction
+    ///
+    /// * `ra,pr` - Rayleigh and Prandtl number
+    ///
+    /// * `dt` - Timestep size
+    ///
+    /// * `aspect` - Aspect ratio L/H (unity is assumed to be to 2pi)
+    #[allow(clippy::similar_names)]
+    pub fn new_periodic(
+        nx: usize,
+        ny: usize,
+        ra: f64,
+        pr: f64,
+        dt: f64,
+        aspect: f64,
+    ) -> Navier2D<Complex<f64>, Space2R2c> {
+        // geometry scales
+        let scale = [aspect, 1.];
+        // diffusivities
+        let nu = get_nu(ra, pr, scale[1] * 2.0);
+        let ka = get_ka(ra, pr, scale[1] * 2.0);
+        // velocities
+        let ux = Field2::new(&Space2::new(&fourier_r2c(nx), &cheb_dirichlet(ny)));
+        let uy = Field2::new(&Space2::new(&fourier_r2c(nx), &cheb_dirichlet(ny)));
+        // temperature
+        let temp = Field2::new(&Space2::new(&fourier_r2c(nx), &cheb_dirichlet(ny)));
+        // pressure
+        let pres = [
+            Field2::new(&Space2::new(&fourier_r2c(nx), &chebyshev(ny))),
+            Field2::new(&Space2::new(&fourier_r2c(nx), &cheb_neumann(ny))),
+        ];
+        // fields for derivatives
+        let field = Field2::new(&Space2::new(&fourier_r2c(nx), &chebyshev(ny)));
+        // define solver
+        let solver_ux = SolverField::Hholtz(Hholtz::new(
+            &ux,
+            [dt * nu / scale[0].powf(2.), dt * nu / scale[1].powf(2.)],
+        ));
+        let solver_uy = SolverField::Hholtz(Hholtz::new(
+            &uy,
+            [dt * nu / scale[0].powf(2.), dt * nu / scale[1].powf(2.)],
+        ));
+        let solver_temp = SolverField::Hholtz(Hholtz::new(
+            &temp,
+            [dt * ka / scale[0].powf(2.), dt * ka / scale[1].powf(2.)],
+        ));
+        let solver_pres = SolverField::Poisson(Poisson::new(
+            &pres[1],
+            [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
+        ));
+        let solver = [solver_ux, solver_uy, solver_temp, solver_pres];
+        let rhs = Array2::zeros(field.vhat.raw_dim());
+
+        // Diagnostics
+        let mut diagnostics = HashMap::new();
+        diagnostics.insert("time".to_string(), Vec::<f64>::new());
+        diagnostics.insert("Nu".to_string(), Vec::<f64>::new());
+        diagnostics.insert("Nuvol".to_string(), Vec::<f64>::new());
+        diagnostics.insert("Re".to_string(), Vec::<f64>::new());
+
+        // Initialize
+        let mut navier = Navier2D::<Complex<f64>, Space2R2c> {
+            field,
+            temp,
+            ux,
+            uy,
+            pres,
+            solver,
+            rhs,
+            fieldbc: None,
+            nu,
+            ka,
+            ra,
+            pr,
+            time: 0.0,
+            dt,
+            scale,
+            diagnostics,
+            write_intervall: None,
+            solid: None,
+        };
+        navier._scale();
+        // Boundary condition
+        navier.set_temp_bc(Self::bc_rbc_periodic(nx, ny));
+        // Initial condition
+        navier.set_velocity(0.2, 1., 1.);
+        // Return
+        navier
+    }
+
+    /// Return field for rayleigh benard
+    /// type temperature boundary conditions:
+    ///
+    /// T = 0.5 at the bottom and T = -0.5
+    /// at the top
+    pub fn bc_rbc_periodic(nx: usize, ny: usize) -> Field2<Complex<f64>, Space2R2c> {
+        use crate::bases::Transform;
+        // Create base and field
+        let mut x_base = fourier_r2c(nx);
+        let y_base = cheb_dirichlet_bc(ny);
+        let space = Space2::new(&x_base, &y_base);
+        let mut fieldbc = Field2::new(&space);
+        let mut bc = Array2::<f64>::zeros((nx, 2));
+
+        // Set boundary condition along axis
+        bc.slice_mut(s![.., 0]).fill(0.5);
+        bc.slice_mut(s![.., 1]).fill(-0.5);
+
+        // Transform
+        x_base.forward_inplace(&mut bc, &mut fieldbc.vhat, 0);
         fieldbc.backward();
         fieldbc.forward();
         fieldbc
@@ -573,118 +703,133 @@ macro_rules! impl_navier_convection {
 impl_navier_convection!(f64);
 impl_navier_convection!(Complex<f64>);
 
-impl<S> Integrate for Navier2D<f64, S>
-where
-    S: BaseSpace<f64, 2, Physical = f64, Spectral = f64>,
-{
-    /// Update 1 timestep
-    fn update(&mut self) {
-        // Buoyancy
-        let mut that = self.temp.to_ortho();
-        if let Some(field) = &self.fieldbc {
-            that = &that + &field.to_ortho();
-        }
+macro_rules! impl_integrate_for_navier {
+    ($s: ty, $norm: ident) => {
 
-        // Convection Veclocity
-        self.ux.backward();
-        self.uy.backward();
-        let ux = self.ux.v.to_owned();
-        let uy = self.uy.v.to_owned();
+        impl<S> Integrate for Navier2D<$s, S>
+        where
+            S: BaseSpace<f64, 2, Physical = f64, Spectral = $s>,
+        {
+            /// Update 1 timestep
+            fn update(&mut self) {
+                // Buoyancy
+                let mut that = self.temp.to_ortho();
+                if let Some(field) = &self.fieldbc {
+                    that = &that + &field.to_ortho();
+                }
 
-        // Solve Velocity
-        self.solve_ux(&ux, &uy);
-        self.solve_uy(&ux, &uy, &that);
+                // Convection Veclocity
+                self.ux.backward();
+                self.uy.backward();
+                let ux = self.ux.v.to_owned();
+                let uy = self.uy.v.to_owned();
 
-        // Projection
-        let div = self.divergence();
-        self.solve_pres(&div);
-        self.project_velocity(1.0);
-        self.update_pres(&div);
+                // Solve Velocity
+                self.solve_ux(&ux, &uy);
+                self.solve_uy(&ux, &uy, &that);
 
-        // Solve Temperature
-        self.solve_temp(&ux, &uy);
+                // Projection
+                let div = self.divergence();
+                self.solve_pres(&div);
+                self.project_velocity(1.0);
+                self.update_pres(&div);
 
-        // update time
-        self.time += self.dt;
-    }
+                // Solve Temperature
+                self.solve_temp(&ux, &uy);
 
-    fn get_time(&self) -> f64 {
-        self.time
-    }
-
-    fn get_dt(&self) -> f64 {
-        self.dt
-    }
-
-    fn callback(&mut self) {
-        use std::io::Write;
-
-        // Write hdf5 file
-        std::fs::create_dir_all("data").unwrap();
-
-        // Write flow field
-        let fname = format!("data/flow{:.*}.h5", 3, self.time);
-        if let Some(dt_save) = &self.write_intervall {
-            if (self.time % dt_save) < self.dt / 2.
-                || (self.time % dt_save) > dt_save - self.dt / 2.
-            {
-                self.write(&fname, None);
+                // update time
+                self.time += self.dt;
             }
-        } else {
-            self.write(&fname, None);
-        }
 
-        // I/O
-        let div = self.divergence();
-        let nu = self.eval_nu();
-        let nuvol = self.eval_nuvol();
-        let re = self.eval_re();
-        println!(
-            "time = {:4.2}      |div| = {:4.2e}     Nu = {:5.3e}     Nuv = {:5.3e}    Re = {:5.3e}",
-            self.time,
-            norm_l2(&div),
-            nu,
-            nuvol,
-            re,
-        );
+            fn get_time(&self) -> f64 {
+                self.time
+            }
 
-        // diagnostics
-        if let Some(d) = self.diagnostics.get_mut("time") {
-            d.push(self.time);
-        }
-        if let Some(d) = self.diagnostics.get_mut("Nu") {
-            d.push(nu);
-        }
-        if let Some(d) = self.diagnostics.get_mut("Nuvol") {
-            d.push(nuvol);
-        }
-        if let Some(d) = self.diagnostics.get_mut("Re") {
-            d.push(re);
-        }
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .append(true)
-            .create(true)
-            .open("data/info.txt")
-            .unwrap();
-        //write!(file, "{} {}", time, nu);
-        if let Err(e) = writeln!(file, "{} {} {} {}", self.time, nu, nuvol, re) {
-            eprintln!("Couldn't write to file: {}", e);
-        }
-    }
+            fn get_dt(&self) -> f64 {
+                self.dt
+            }
 
-    fn exit(&mut self) -> bool {
-        // Break if divergence is nan
-        let div = self.divergence();
-        if norm_l2(&div).is_nan() {
-            return true;
+            fn callback(&mut self) {
+                use std::io::Write;
+
+                // Write hdf5 file
+                std::fs::create_dir_all("data").unwrap();
+
+                // Write flow field
+                let fname = format!("data/flow{:.*}.h5", 3, self.time);
+                if let Some(dt_save) = &self.write_intervall {
+                    if (self.time % dt_save) < self.dt / 2.
+                        || (self.time % dt_save) > dt_save - self.dt / 2.
+                    {
+                        self.write(&fname, None);
+                    }
+                } else {
+                    self.write(&fname, None);
+                }
+
+                // I/O
+                let div = self.divergence();
+                let nu = self.eval_nu();
+                let nuvol = self.eval_nuvol();
+                let re = self.eval_re();
+                println!(
+                    "time = {:4.2}      |div| = {:4.2e}     Nu = {:5.3e}     Nuv = {:5.3e}    Re = {:5.3e}",
+                    self.time,
+                    $norm(&div),
+                    nu,
+                    nuvol,
+                    re,
+                );
+
+                // diagnostics
+                if let Some(d) = self.diagnostics.get_mut("time") {
+                    d.push(self.time);
+                }
+                if let Some(d) = self.diagnostics.get_mut("Nu") {
+                    d.push(nu);
+                }
+                if let Some(d) = self.diagnostics.get_mut("Nuvol") {
+                    d.push(nuvol);
+                }
+                if let Some(d) = self.diagnostics.get_mut("Re") {
+                    d.push(re);
+                }
+                let mut file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .create(true)
+                    .open("data/info.txt")
+                    .unwrap();
+                //write!(file, "{} {}", time, nu);
+                if let Err(e) = writeln!(file, "{} {} {} {}", self.time, nu, nuvol, re) {
+                    eprintln!("Couldn't write to file: {}", e);
+                }
+            }
+
+            fn exit(&mut self) -> bool {
+                // Break if divergence is nan
+                let div = self.divergence();
+                if $norm(&div).is_nan() {
+                    return true;
+                }
+                false
+            }
         }
-        false
-    }
+    };
+}
+impl_integrate_for_navier!(f64, norm_l2_f64);
+impl_integrate_for_navier!(Complex<f64>, norm_l2_c64);
+
+fn norm_l2_f64(array: &Array2<f64>) -> f64 {
+    array.iter().map(|x| x.powi(2)).sum::<f64>().sqrt()
 }
 
-fn norm_l2(array: &Array2<f64>) -> f64 {
-    array.iter().map(|x| x.powi(2)).sum::<f64>().sqrt()
+fn norm_l2_c64(array: &Array2<Complex<f64>>) -> f64 {
+    array
+        .iter()
+        .map(|x| x.re.powi(2) + x.im.powi(2))
+        .sum::<f64>()
+        .sqrt()
 }
 
 impl<T, S> Navier2D<T, S>
@@ -833,7 +978,7 @@ where
             field.v[[i, j]] = amp * (arg_x * x[i]).sin() * (arg_y * y[j]).cos();
         }
     }
-    field.forward()
+    field.forward();
 }
 
 /// Construct field f(x,y) = amp \* cos(pi\*m)sin(pi\*n)
@@ -855,7 +1000,7 @@ where
             field.v[[i, j]] = amp * (arg_x * x[i]).cos() * (arg_y * y[j]).sin();
         }
     }
-    field.forward()
+    field.forward();
 }
 
 /// Transfer function for zero sidewall boundary condition

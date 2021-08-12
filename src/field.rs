@@ -6,7 +6,8 @@
 pub mod average;
 pub mod read;
 pub mod write;
-use crate::bases::*;
+use crate::bases::LaplacianInverse;
+use crate::bases::{BaseAll, BaseC2c, BaseR2c, BaseR2r, Basics};
 pub use crate::bases::{BaseSpace, Space1, Space2};
 use crate::types::FloatNum;
 use ndarray::{prelude::*, Data};
@@ -125,7 +126,7 @@ where
     where
         S1: Data<Elem = T2>,
     {
-        self.space.from_ortho_inplace_par(input, &mut self.vhat)
+        self.space.from_ortho_inplace_par(input, &mut self.vhat);
     }
 
     /// Gradient
