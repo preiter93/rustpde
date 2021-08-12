@@ -23,7 +23,7 @@ use ndarray::{Array1, Array2};
 /// let mut diff = Diffusion1D::new(field, 1.0, 0.1);
 /// diff.impulse();
 /// diff.update();
-/// diff.write();
+/// diff.callback();
 ///```
 pub struct Diffusion1D<S> {
     field: Field1<f64, S>,
@@ -122,7 +122,7 @@ where
 /// let mut diff = Diffusion2D::new(field, 1.0, 0.1);
 /// diff.impulse();
 /// diff.update();
-/// diff.write();
+/// diff.callback();
 /// integrate(&mut diff,0.1,None);
 ///```
 pub struct Diffusion2D<S> {
