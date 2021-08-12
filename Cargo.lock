@@ -45,9 +45,9 @@ checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
 name = "bitflags"
-version = "1.2.1"
+version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
+checksum = "2da1976d75adbe5fbc88130ecd119529cf1cc6a93ae1546d8696ee66f0d21af1"
 
 [[package]]
 name = "bstr"
@@ -82,7 +82,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ff11ddd2af3b5e80dd0297fee6e56ac038d9bdc549573cdb51bd6d2efe7f05e"
 dependencies = [
- "num-complex",
+ "num-complex 0.4.0",
  "num-traits",
  "rand",
  "serde",
@@ -256,13 +256,13 @@ dependencies = [
 
 [[package]]
 name = "funspace"
-version = "0.1.3"
-source = "git+https://github.com/preiter93/funspace?branch=main#02299388dd999133a561090d2a8e84cdde863038"
+version = "0.2.0"
+source = "git+https://github.com/preiter93/funspace?branch=main#59b851ef93655200b483a8278c97cea9feecd079"
 dependencies = [
  "enum_dispatch",
  "ndarray",
  "ndrustfft",
- "num-complex",
+ "num-complex 0.4.0",
  "num-traits",
 ]
 
@@ -316,7 +316,7 @@ source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5a
 dependencies = [
  "hdf5",
  "ndarray",
- "num-complex",
+ "num-complex 0.4.0",
  "num-traits",
 ]
 
@@ -395,7 +395,7 @@ checksum = "6a7f0050af10913bc5e4f6091df38870cb5d4e45094d3dd551c1aff9d1d59b26"
 dependencies = [
  "lapack-sys",
  "libc",
- "num-complex",
+ "num-complex 0.4.0",
 ]
 
 [[package]]
@@ -428,9 +428,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.98"
+version = "0.2.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "320cfe77175da3a483efed4bc0adc1968ca050b098ce4f2f1c13a56626128790"
+checksum = "a7f823d141fe0a24df1e23b4af4e3c7ba9e5966ec514ea068c93024aa7deb765"
 
 [[package]]
 name = "libloading"
@@ -494,7 +494,7 @@ dependencies = [
  "cblas-sys",
  "libc",
  "matrixmultiply",
- "num-complex",
+ "num-complex 0.4.0",
  "num-integer",
  "num-traits",
  "rawpointer",
@@ -510,7 +510,7 @@ dependencies = [
  "cauchy",
  "lax",
  "ndarray",
- "num-complex",
+ "num-complex 0.4.0",
  "num-traits",
  "rand",
  "thiserror",
@@ -518,13 +518,24 @@ dependencies = [
 
 [[package]]
 name = "ndrustfft"
-version = "0.1.6"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47cc3b53cbb1165999da03442375ca978da54098f558ed2a1fb48708c1f0c5b4"
+checksum = "17d1de770e55c4a04ec48ae61747d64c3749e5f54949582a139df6700e17b077"
 dependencies = [
  "ndarray",
  "num-traits",
- "rustfft",
+ "realfft",
+ "rustdct",
+ "rustfft 6.0.1",
+]
+
+[[package]]
+name = "num-complex"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "747d632c0c558b87dbabbe6a82f3b4ae03720d0646ac5b7b4dae89394be5f2c5"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -764,6 +775,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "realfft"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7695c87f31dc3644760f23fb59a3fed47659703abf76cf2d111f03b9e712342"
+dependencies = [
+ "rustfft 6.0.1",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -815,12 +835,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustdct"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fadcb505b98aa64da1dadb1498b912e3642aae4606623cb3ae952cd8da33f80d"
+dependencies = [
+ "rustfft 5.1.1",
+]
+
+[[package]]
+name = "rustfft"
+version = "5.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1869bb2a6ff77380d52ff4bc631f165637035a55855c76aa462c85474dadc42f"
+dependencies = [
+ "num-complex 0.3.1",
+ "num-integer",
+ "num-traits",
+ "primal-check",
+ "strength_reduce",
+ "transpose",
+]
+
+[[package]]
 name = "rustfft"
 version = "6.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1d089e5c57521629a59f5f39bca7434849ff89bd6873b521afe389c1c602543"
 dependencies = [
- "num-complex",
+ "num-complex 0.4.0",
  "num-integer",
  "num-traits",
  "primal-check",
@@ -838,7 +881,7 @@ dependencies = [
  "hdf5-interface",
  "ndarray",
  "ndarray-linalg",
- "num-complex",
+ "num-complex 0.4.0",
  "num-traits",
 ]
 

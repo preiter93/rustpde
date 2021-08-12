@@ -22,18 +22,24 @@
 //!     // // Want to restart?
 //!     // navier.read("data/flow100.000.h5");
 //!     // Write first field
-//!     navier.write();
+//!     navier.callback();
 //!     integrate(&mut navier, 100., Some(1.0));
 //! }
 //! ```
 use super::conv_term;
 use crate::bases::{cheb_dirichlet, cheb_dirichlet_bc, cheb_neumann, chebyshev};
+use crate::bases::{BaseR2c, BaseR2r};
+use crate::field::{BaseSpace, Field2, ReadField, Space2, WriteField};
+use crate::hdf5::Result;
 use crate::hdf5::{read_scalar_from_hdf5, write_scalar_to_hdf5};
 use crate::solver::{Hholtz, Poisson, Solve, SolverField};
+use crate::types::Scalar;
 use crate::Integrate;
-use crate::{Field, Field2, ReadField, WriteField};
 use ndarray::{s, Array1, Array2};
+use num_complex::Complex;
+use num_traits::Zero;
 use std::collections::HashMap;
+use std::ops::{Div, Mul};
 
 /// Return viscosity from Ra, Pr, and height of the cell
 pub fn get_nu(ra: f64, pr: f64, height: f64) -> f64 {
@@ -47,26 +53,83 @@ pub fn get_ka(ra: f64, pr: f64, height: f64) -> f64 {
     f.sqrt()
 }
 
+type Space2R2r = Space2<BaseR2r<f64>, BaseR2r<f64>>;
+type Space2R2c = Space2<BaseR2c<f64>, BaseR2r<f64>>;
+
+/// Implement the ndividual terms of the Navier-Stokes equation
+/// as a trait. This is necessary to support both real and complex
+/// valued spectral spaces
+pub trait NavierConvection {
+    /// Type in physical space (ususally f64)
+    type Physical;
+    /// Type in spectral space (f64 or Complex<f64>)
+    type Spectral;
+
+    /// Convection term for temperature
+    fn conv_temp(
+        &mut self,
+        ux: &Array2<Self::Physical>,
+        uy: &Array2<Self::Physical>,
+    ) -> Array2<Self::Spectral>;
+
+    /// Convection term for velocity ux
+    fn conv_ux(
+        &mut self,
+        ux: &Array2<Self::Physical>,
+        uy: &Array2<Self::Physical>,
+    ) -> Array2<Self::Spectral>;
+
+    /// Convection term for velocity uy
+    fn conv_uy(
+        &mut self,
+        ux: &Array2<Self::Physical>,
+        uy: &Array2<Self::Physical>,
+    ) -> Array2<Self::Spectral>;
+
+    /// Solve horizontal momentum equation
+    /// $$
+    /// (1 - \delta t  \mathcal{D}) u\\_new = -dt*C(u) - \delta t grad(p) + \delta t f + u
+    /// $$
+    fn solve_ux(&mut self, ux: &Array2<Self::Physical>, uy: &Array2<Self::Physical>);
+
+    /// Solve vertical momentum equation
+    fn solve_uy(
+        &mut self,
+        ux: &Array2<Self::Physical>,
+        uy: &Array2<Self::Physical>,
+        buoy: &Array2<Self::Spectral>,
+    );
+
+    // Solve temperature equation:
+    /// $$
+    /// (1 - dt*D) temp\\_new = -dt*C(temp) + dt*fbc + temp
+    /// $$
+    fn solve_temp(&mut self, ux: &Array2<Self::Physical>, uy: &Array2<Self::Physical>);
+
+    /// Correct velocity field.
+    /// $$
+    /// uxnew = ux - c*dpdx
+    /// $$
+    /// uynew = uy - c*dpdy
+    /// $$
+    fn project_velocity(&mut self, c: f64);
+
+    /// Divergence: duxdx + duydy
+    fn divergence(&mut self) -> Array2<Self::Spectral>;
+
+    /// Solve pressure poisson equation
+    /// $$
+    /// D2 pres = f
+    /// $$
+    /// pseu: pseudo pressure ( in code it is pres\[1\] )
+    fn solve_pres(&mut self, f: &Array2<Self::Spectral>);
+
+    /// Update pressure term by divergence
+    fn update_pres(&mut self, div: &Array2<Self::Spectral>);
+}
+
 /// Solve 2-dimensional Navier-Stokes equations
 /// coupled with temperature equations
-///
-/// Bases: Chebyshev in x & y
-///
-/// Struct must be mutable, to perform the
-/// update step, which advances the solution
-/// by 1 timestep.
-///
-/// # Arguments
-///
-/// * `nx,ny` - The number of modes in x and y -direction
-///
-/// * `ra,pr` - Rayleigh and Prandtl number
-///
-/// * `dt` - Timestep size
-///
-/// * `adiabatic` - Boolean, sidewall temperature boundary condition
-///
-/// * `aspect` - Aspect ratio L/H
 ///
 /// # Examples
 ///
@@ -84,23 +147,23 @@ pub fn get_ka(ra: f64, pr: f64, height: f64) -> f64 {
 /// // navier.read("data/flow0.000.h5");
 /// integrate(&mut navier, 0.2,  None);
 /// ```
-pub struct Navier2D {
+pub struct Navier2D<T, S> {
     /// Field for derivatives and transforms
-    field: Field2,
+    field: Field2<T, S>,
     /// Temperature
-    pub temp: Field2,
+    pub temp: Field2<T, S>,
     /// Horizontal Velocity
-    pub ux: Field2,
+    pub ux: Field2<T, S>,
     /// Vertical Velocity
-    pub uy: Field2,
+    pub uy: Field2<T, S>,
     /// Pressure \[pres, pseudo pressure\]
-    pub pres: [Field2; 2],
+    pub pres: [Field2<T, S>; 2],
     /// Collection of solvers \[ux, uy, temp, pres\]
     solver: [SolverField<f64, 2>; 4],
     /// Buffer
-    rhs: Array2<f64>,
+    rhs: Array2<T>,
     /// Field for temperature boundary condition
-    pub fieldbc: Option<Field2>,
+    pub fieldbc: Option<Field2<T, S>>,
     /// Viscosity
     nu: f64,
     /// Thermal diffusivity
@@ -124,8 +187,27 @@ pub struct Navier2D {
     pub solid: Option<Array2<f64>>,
 }
 
-impl Navier2D {
-    /// Returns Navier-Stokes Solver, an integrable type, used with `pde::integrate`
+impl Navier2D<f64, Space2R2r>
+//where
+//    S: BaseSpace<f64, 2, Physical = f64, Spectral = f64>,
+{
+    /// Bases: Chebyshev in x & y
+    ///
+    /// Struct must be mutable, to perform the
+    /// update step, which advances the solution
+    /// by 1 timestep.
+    ///
+    /// # Arguments
+    ///
+    /// * `nx,ny` - The number of modes in x and y -direction
+    ///
+    /// * `ra,pr` - Rayleigh and Prandtl number
+    ///
+    /// * `dt` - Timestep size
+    ///
+    /// * `adiabatic` - Boolean, sidewall temperature boundary condition
+    ///
+    /// * `aspect` - Aspect ratio L/H
     pub fn new(
         nx: usize,
         ny: usize,
@@ -134,56 +216,43 @@ impl Navier2D {
         dt: f64,
         adiabatic: bool,
         aspect: f64,
-    ) -> Self {
+    ) -> Navier2D<f64, Space2R2r> {
+        // geometry scales
         let scale = [aspect, 1.];
+        // diffusivities
         let nu = get_nu(ra, pr, scale[1] * 2.0);
         let ka = get_ka(ra, pr, scale[1] * 2.0);
-        let ux = Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)]);
-        let uy = Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)]);
+        // velocities
+        let ux = Field2::new(&Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(ny)));
+        let uy = Field2::new(&Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(ny)));
+        // temperature
         let temp = if adiabatic {
-            Field2::new(&[cheb_neumann(nx), cheb_dirichlet(ny)])
+            Field2::new(&Space2::new(&cheb_neumann(nx), &cheb_dirichlet(ny)))
         } else {
-            Field2::new(&[cheb_dirichlet(nx), cheb_dirichlet(ny)])
+            Field2::new(&Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(ny)))
         };
-        Self::from_fields(temp, ux, uy, nu, ka, ra, pr, dt, scale)
-    }
-
-    #[allow(clippy::too_many_arguments, clippy::similar_names)]
-    fn from_fields(
-        temp: Field2,
-        ux: Field2,
-        uy: Field2,
-        nu: f64,
-        ka: f64,
-        ra: f64,
-        pr: f64,
-        dt: f64,
-        scale: [f64; 2],
-    ) -> Self {
-        // define additional fields
-        let nx = temp.v.shape()[0];
-        let ny = temp.v.shape()[1];
-        let field = Field2::new(&[chebyshev(nx), chebyshev(ny)]);
+        // pressure
         let pres = [
-            Field2::new(&[chebyshev(nx), chebyshev(ny)]),
-            Field2::new(&[cheb_neumann(nx), cheb_neumann(ny)]),
+            Field2::new(&Space2::new(&chebyshev(nx), &chebyshev(ny))),
+            Field2::new(&Space2::new(&cheb_neumann(nx), &cheb_neumann(ny))),
         ];
-
+        // fields for derivatives
+        let field = Field2::new(&Space2::new(&chebyshev(nx), &chebyshev(ny)));
         // define solver
-        let solver_ux = SolverField::Hholtz(Hholtz::from_space(
-            &ux.space,
+        let solver_ux = SolverField::Hholtz(Hholtz::new(
+            &ux,
             [dt * nu / scale[0].powf(2.), dt * nu / scale[1].powf(2.)],
         ));
-        let solver_uy = SolverField::Hholtz(Hholtz::from_space(
-            &uy.space,
+        let solver_uy = SolverField::Hholtz(Hholtz::new(
+            &uy,
             [dt * nu / scale[0].powf(2.), dt * nu / scale[1].powf(2.)],
         ));
-        let solver_temp = SolverField::Hholtz(Hholtz::from_space(
-            &temp.space,
+        let solver_temp = SolverField::Hholtz(Hholtz::new(
+            &temp,
             [dt * ka / scale[0].powf(2.), dt * ka / scale[1].powf(2.)],
         ));
-        let solver_pres = SolverField::Poisson(Poisson::from_space(
-            &pres[1].space,
+        let solver_pres = SolverField::Poisson(Poisson::new(
+            &pres[1],
             [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
         ));
         let solver = [solver_ux, solver_uy, solver_temp, solver_pres];
@@ -197,7 +266,7 @@ impl Navier2D {
         diagnostics.insert("Re".to_string(), Vec::<f64>::new());
 
         // Initialize
-        let mut navier = Navier2D {
+        let mut navier = Navier2D::<f64, Space2R2r> {
             field,
             temp,
             ux,
@@ -226,6 +295,66 @@ impl Navier2D {
         navier
     }
 
+    /// Return field for rayleigh benard
+    /// type temperature boundary conditions:
+    ///
+    /// T = 0.5 at the bottom and T = -0.5
+    /// at the top
+    pub fn bc_rbc(nx: usize, ny: usize) -> Field2<f64, Space2R2r> {
+        use crate::bases::Transform;
+        // Create base and field
+        let mut xbase = chebyshev(nx);
+        let ybase = cheb_dirichlet_bc(ny);
+        let space = Space2::new(&xbase, &ybase);
+        let mut fieldbc = Field2::new(&space);
+        let mut bc = fieldbc.vhat.to_owned();
+
+        // Set boundary condition along axis
+        bc.slice_mut(s![.., 0]).fill(0.5);
+        bc.slice_mut(s![.., 1]).fill(-0.5);
+
+        // Transform
+        xbase.forward_inplace(&mut bc, &mut fieldbc.vhat, 0);
+        fieldbc.backward();
+        fieldbc.forward();
+        fieldbc
+    }
+
+    /// Return field for zero sidewall boundary
+    /// condition with smooth transfer function
+    /// to T = 0.5 at the bottom and T = -0.5
+    /// at the top
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - Transition parameter (larger means smoother)
+    pub fn bc_zero(nx: usize, ny: usize, k: f64) -> Field2<f64, Space2R2r> {
+        use crate::bases::Transform;
+        // Create base and field
+        let xbase = cheb_dirichlet_bc(ny);
+        let mut ybase = chebyshev(nx);
+        let space = Space2::new(&xbase, &ybase);
+        let mut fieldbc = Field2::new(&space);
+        let mut bc = fieldbc.vhat.to_owned();
+        // Sidewall temp function
+        let transfer = transfer_function(&fieldbc.x[1], 0.5, 0., -0.5, k);
+        // Set boundary condition along axis
+        bc.slice_mut(s![0, ..]).assign(&transfer);
+        bc.slice_mut(s![1, ..]).assign(&transfer);
+
+        // Transform
+        ybase.forward_inplace(&mut bc, &mut fieldbc.vhat, 1);
+        fieldbc.backward();
+        fieldbc.forward();
+        fieldbc
+    }
+}
+
+impl<T, S> Navier2D<T, S>
+where
+    T: num_traits::Zero,
+    S: BaseSpace<f64, 2, Physical = f64, Spectral = T>,
+{
     /// Rescale x & y coordinates of fields.
     /// Only affects output of files
     fn _scale(&mut self) {
@@ -240,279 +369,220 @@ impl Navier2D {
         }
     }
 
-    /// Return field for rayleigh benard
-    /// type temperature boundary conditions:
-    ///
-    /// T = 0.5 at the bottom and T = -0.5
-    /// at the top
-    pub fn bc_rbc(nx: usize, ny: usize) -> Field2 {
-        use crate::bases::Transform;
-        // Create base and field
-        let mut bases = [chebyshev(nx), cheb_dirichlet_bc(ny)];
-        let mut fieldbc = Field2::new(&[chebyshev(nx), cheb_dirichlet_bc(ny)]);
-        let mut bc = fieldbc.vhat.to_owned();
-
-        // Set boundary condition along axis
-        bc.slice_mut(s![.., 0]).fill(0.5);
-        bc.slice_mut(s![.., 1]).fill(-0.5);
-
-        // Transform
-        bases[0].forward_inplace(&mut bc, &mut fieldbc.vhat, 0);
-        fieldbc.backward();
-        fieldbc.forward();
-        fieldbc
-    }
-
-    /// Return field for zero sidewall boundary
-    /// condition with smooth transfer function
-    /// to T = 0.5 at the bottom and T = -0.5
-    /// at the top
-    ///
-    /// # Arguments
-    ///
-    /// * `k` - Transition parameter (larger means smoother)
-    pub fn bc_zero(nx: usize, ny: usize, k: f64) -> Field2 {
-        use crate::bases::Transform;
-        // Create base and field
-        let mut bases = [cheb_dirichlet_bc(nx), chebyshev(ny)];
-        let mut fieldbc = Field2::new(&[cheb_dirichlet_bc(nx), chebyshev(ny)]);
-        let mut bc = fieldbc.vhat.to_owned();
-        // Sidewall temp function
-        let transfer = transfer_function(&fieldbc.x[1], 0.5, 0., -0.5, k);
-        // Set boundary condition along axis
-        bc.slice_mut(s![0, ..]).assign(&transfer);
-        bc.slice_mut(s![1, ..]).assign(&transfer);
-
-        // Transform
-        bases[1].forward_inplace(&mut bc, &mut fieldbc.vhat, 1);
-        fieldbc.backward();
-        fieldbc.forward();
-        fieldbc
-    }
-
     /// Set boundary condition field for temperature
-    pub fn set_temp_bc(&mut self, fieldbc: Field2) {
+    pub fn set_temp_bc(&mut self, fieldbc: Field2<T, S>) {
         self.fieldbc = Some(fieldbc);
     }
 
     fn zero_rhs(&mut self) {
         for r in self.rhs.iter_mut() {
-            *r = 0.;
+            *r = T::zero();
         }
-    }
-
-    /// Convection term for temperature
-    fn conv_temp(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) -> Array2<f64> {
-        // + ux * dTdx + uy * dTdy
-        let mut conv = conv_term::<f64>(&self.temp, &mut self.field, ux, [1, 0], Some(self.scale));
-        conv += &conv_term::<f64>(&self.temp, &mut self.field, uy, [0, 1], Some(self.scale));
-        // + bc contribution
-        if let Some(field) = &self.fieldbc {
-            conv += &conv_term::<f64>(field, &mut self.field, ux, [1, 0], Some(self.scale));
-            conv += &conv_term::<f64>(field, &mut self.field, uy, [0, 1], Some(self.scale));
-        }
-        // + solid interaction
-        if let Some(solid) = &self.solid {
-            let eta = 1e-3;
-            self.temp.backward();
-            let damp = self.fieldbc.as_ref().map_or_else(
-                || -1. / eta * solid * &self.temp.v,
-                |field| -1. / eta * solid * &(&self.temp.v + &field.v),
-            );
-            conv -= &damp;
-        }
-        // -> spectral space
-        self.field.v.assign(&conv);
-        self.field.forward();
-        self.field.vhat.to_owned()
-    }
-
-    /// Convection term for ux
-    fn conv_ux(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) -> Array2<f64> {
-        // + ux * dudx + uy * dudy
-        let mut conv = conv_term::<f64>(&self.ux, &mut self.field, ux, [1, 0], Some(self.scale));
-        conv += &conv_term::<f64>(&self.ux, &mut self.field, uy, [0, 1], Some(self.scale));
-        // + solid interaction
-        if let Some(solid) = &self.solid {
-            let eta = 1e-3;
-            let damp = -1. / eta * solid * ux;
-            conv -= &damp;
-        }
-        // -> spectral space
-        self.field.v.assign(&conv);
-        self.field.forward();
-        self.field.vhat.to_owned()
-    }
-
-    /// Convection term for uy
-    fn conv_uy(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) -> Array2<f64> {
-        // + ux * dudx + uy * dudy
-        let mut conv = conv_term::<f64>(&self.uy, &mut self.field, ux, [1, 0], Some(self.scale));
-        conv += &conv_term::<f64>(&self.uy, &mut self.field, uy, [0, 1], Some(self.scale));
-        // + solid interaction
-        if let Some(solid) = &self.solid {
-            let eta = 1e-3;
-            let damp = -1. / eta * solid * uy;
-            conv -= &damp;
-        }
-        // -> spectral space
-        self.field.v.assign(&conv);
-        self.field.forward();
-        self.field.vhat.to_owned()
-    }
-
-    /// Solve horizontal momentum equation
-    /// $$
-    /// (1 - \delta t  \mathcal{D}) u\\_new = -dt*C(u) - \delta t grad(p) + \delta t f + u
-    /// $$
-    fn solve_ux(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) {
-        self.zero_rhs();
-        // + old field
-        self.rhs += &self.ux.to_ortho();
-        // + pres
-        self.rhs -= &(self.dt * self.pres[0].grad([1, 0], Some(self.scale)));
-        // + convection
-        let conv = self.conv_ux(ux, uy);
-        self.rhs -= &(self.dt * conv);
-        // solve lhs
-        //self.ux.vhat.assign(&self.solver[0].solve(&self.rhs));
-        self.solver[0].solve(&self.rhs, &mut self.ux.vhat, 0);
-    }
-
-    /// Solve vertical momentum equation
-    fn solve_uy(&mut self, ux: &Array2<f64>, uy: &Array2<f64>, buoy: &Array2<f64>) {
-        self.zero_rhs();
-        // + old field
-        self.rhs += &self.uy.to_ortho();
-        // + pres
-        self.rhs -= &(self.dt * self.pres[0].grad([0, 1], Some(self.scale)));
-        // + buoyancy
-        self.rhs += &(self.dt * buoy);
-        // + convection
-        let conv = self.conv_uy(ux, uy);
-        self.rhs -= &(self.dt * conv);
-        // solve lhs
-        //self.uy.vhat.assign(&self.solver[1].solve(&self.rhs));
-        self.solver[1].solve(&self.rhs, &mut self.uy.vhat, 0);
-    }
-
-    /// Divergence: duxdx + duydy
-    fn divergence(&mut self) -> Array2<f64> {
-        self.zero_rhs();
-        self.rhs += &self.ux.grad([1, 0], Some(self.scale));
-        self.rhs += &self.uy.grad([0, 1], Some(self.scale));
-        self.rhs.to_owned()
-    }
-
-    /// Correct velocity field.
-    /// $$
-    /// uxnew = ux - c*dpdx
-    /// $$
-    /// uynew = uy - c*dpdy
-    /// $$
-    #[allow(clippy::similar_names)]
-    fn project_velocity(&mut self, c: f64) {
-        let dpdx = self.pres[1].grad([1, 0], Some(self.scale));
-        let dpdy = self.pres[1].grad([0, 1], Some(self.scale));
-
-        // self.ux.vhat -= &(c * self.ux.from_parent(&dpdx));
-        // self.uy.vhat -= &(c * self.uy.from_parent(&dpdy));
-
-        let ux_old = self.ux.vhat.clone();
-        let uy_old = self.uy.vhat.clone();
-        self.ux.from_ortho(&dpdx);
-        self.uy.from_ortho(&dpdy);
-        self.ux.vhat *= -c;
-        self.uy.vhat *= -c;
-        self.ux.vhat += &ux_old;
-        self.uy.vhat += &uy_old;
-    }
-
-    /// Solve temperature equation:
-    /// $$
-    /// (1 - dt*D) temp\\_new = -dt*C(temp) + dt*fbc + temp
-    /// $$
-    fn solve_temp(&mut self, ux: &Array2<f64>, uy: &Array2<f64>) {
-        self.zero_rhs();
-        // + old field
-        self.rhs += &self.temp.to_ortho();
-        // + diffusion bc contribution
-        if let Some(field) = &self.fieldbc {
-            self.rhs += &(self.dt * self.ka * field.grad([2, 0], Some(self.scale)));
-            self.rhs += &(self.dt * self.ka * field.grad([0, 2], Some(self.scale)));
-        }
-        // + convection
-        let conv = self.conv_temp(ux, uy);
-        self.rhs -= &(self.dt * conv);
-        // solve lhs
-        // self.temp.vhat.assign(&self.solver[2].solve(&self.rhs));
-        self.solver[2].solve(&self.rhs, &mut self.temp.vhat, 0);
-    }
-
-    /// Solve pressure poisson equation
-    /// $$
-    /// D2 pres = f
-    /// $$
-    /// pseu: pseudo pressure ( in code it is pres\[1\] )
-    fn solve_pres(&mut self, f: &Array2<f64>) {
-        //self.pres[1].vhat.assign(&self.solver[3].solve(&f));
-        self.solver[3].solve(&f, &mut self.pres[1].vhat, 0);
-        // Singularity
-        self.pres[1].vhat[[0, 0]] = 0.;
-    }
-
-    fn update_pres(&mut self, div: &Array2<f64>) {
-        self.pres[0].vhat -= &(self.nu * div);
-        self.pres[0].vhat += &(&self.pres[1].to_ortho() / self.dt);
     }
 }
 
-impl Navier2D {
-    /// Returns Nusselt number (heat flux at the plates)
-    /// $$
-    /// Nu = \langle - dTdz \rangle\\_x (0/H))
-    /// $$
-    pub fn eval_nu(&mut self) -> f64 {
-        use super::functions::eval_nu;
-        eval_nu::<f64>(&mut self.temp, &mut self.field, &self.fieldbc, &self.scale)
-    }
+macro_rules! impl_navier_convection {
+    ($s: ty) => {
+        impl<S> NavierConvection for Navier2D<$s, S>
+        where
+            S: BaseSpace<f64, 2, Physical = f64, Spectral = $s>,
+        {
+            type Physical = f64;
+            type Spectral = $s;
 
-    /// Returns volumetric Nusselt number
-    /// $$
-    /// Nuvol = \langle uy*T/kappa - dTdz \rangle\\_V
-    /// $$
-    pub fn eval_nuvol(&mut self) -> f64 {
-        use super::functions::eval_nuvol;
-        eval_nuvol::<f64>(
-            &mut self.temp,
-            &mut self.uy,
-            &mut self.field,
-            &self.fieldbc,
-            self.ka,
-            &self.scale,
-        )
-    }
+            /// Convection term for temperature
+            fn conv_temp(
+                &mut self,
+                ux: &Array2<Self::Physical>,
+                uy: &Array2<Self::Physical>,
+            ) -> Array2<Self::Spectral> {
+                // + ux * dTdx + uy * dTdy
+                let mut conv = conv_term(&self.temp, &mut self.field, ux, [1, 0], Some(self.scale));
+                conv += &conv_term(&self.temp, &mut self.field, uy, [0, 1], Some(self.scale));
+                // + bc contribution
+                if let Some(field) = &self.fieldbc {
+                    conv += &conv_term(field, &mut self.field, ux, [1, 0], Some(self.scale));
+                    conv += &conv_term(field, &mut self.field, uy, [0, 1], Some(self.scale));
+                }
+                // + solid interaction
+                if let Some(solid) = &self.solid {
+                    let eta = 1e-3;
+                    self.temp.backward();
+                    let damp = self.fieldbc.as_ref().map_or_else(
+                        || -1. / eta * solid * &self.temp.v,
+                        |field| -1. / eta * solid * &(&self.temp.v + &field.v),
+                    );
+                    conv -= &damp;
+                }
+                // -> spectral space
+                self.field.v.assign(&conv);
+                self.field.forward();
+                self.field.vhat.to_owned()
+            }
 
-    /// Returns Reynolds number based on kinetic energy
-    pub fn eval_re(&mut self) -> f64 {
-        use super::functions::eval_re;
-        eval_re::<f64>(
-            &mut self.ux,
-            &mut self.uy,
-            &mut self.field,
-            self.nu,
-            &self.scale,
-        )
-    }
+            /// Convection term for ux
+            fn conv_ux(
+                &mut self,
+                ux: &Array2<Self::Physical>,
+                uy: &Array2<Self::Physical>,
+            ) -> Array2<Self::Spectral> {
+                // + ux * dudx + uy * dudy
+                let mut conv = conv_term(&self.ux, &mut self.field, ux, [1, 0], Some(self.scale));
+                conv += &conv_term(&self.ux, &mut self.field, uy, [0, 1], Some(self.scale));
+                // + solid interaction
+                if let Some(solid) = &self.solid {
+                    let eta = 1e-3;
+                    let damp = -1. / eta * solid * ux;
+                    conv -= &damp;
+                }
+                // -> spectral space
+                self.field.v.assign(&conv);
+                self.field.forward();
+                self.field.vhat.to_owned()
+            }
+
+            /// Convection term for uy
+            fn conv_uy(
+                &mut self,
+                ux: &Array2<Self::Physical>,
+                uy: &Array2<Self::Physical>,
+            ) -> Array2<Self::Spectral> {
+                // + ux * dudx + uy * dudy
+                let mut conv = conv_term(&self.uy, &mut self.field, ux, [1, 0], Some(self.scale));
+                conv += &conv_term(&self.uy, &mut self.field, uy, [0, 1], Some(self.scale));
+                // + solid interaction
+                if let Some(solid) = &self.solid {
+                    let eta = 1e-3;
+                    let damp = -1. / eta * solid * uy;
+                    conv -= &damp;
+                }
+                // -> spectral space
+                self.field.v.assign(&conv);
+                self.field.forward();
+                self.field.vhat.to_owned()
+            }
+
+            /// Solve horizontal momentum equation
+            /// $$
+            /// (1 - \delta t  \mathcal{D}) u\\_new = -dt*C(u) - \delta t grad(p) + \delta t f + u
+            /// $$
+            fn solve_ux(&mut self, ux: &Array2<Self::Physical>, uy: &Array2<Self::Physical>) {
+                self.zero_rhs();
+                // + old field
+                self.rhs += &self.ux.to_ortho();
+                // + pres
+                self.rhs -= &(self.pres[0].gradient([1, 0], Some(self.scale)) * self.dt);
+                // + convection
+                let conv = self.conv_ux(ux, uy);
+                self.rhs -= &(conv * self.dt);
+                // solve lhs
+                self.solver[0].solve(&self.rhs, &mut self.ux.vhat, 0);
+            }
+
+            /// Solve vertical momentum equation
+            fn solve_uy(
+                &mut self,
+                ux: &Array2<Self::Physical>,
+                uy: &Array2<Self::Physical>,
+                buoy: &Array2<Self::Spectral>,
+            ) {
+                self.zero_rhs();
+                // + old field
+                self.rhs += &self.uy.to_ortho();
+                // + pres
+                self.rhs -= &(self.pres[0].gradient([0, 1], Some(self.scale)) * self.dt);
+                // + buoyancy
+                self.rhs += &(buoy * self.dt);
+                // + convection
+                let conv = self.conv_uy(ux, uy);
+                self.rhs -= &(conv * self.dt);
+                // solve lhs
+                self.solver[1].solve(&self.rhs, &mut self.uy.vhat, 0);
+            }
+
+            /// Solve temperature equation:
+            /// $$
+            /// (1 - dt*D) temp\\_new = -dt*C(temp) + dt*fbc + temp
+            /// $$
+            fn solve_temp(&mut self, ux: &Array2<Self::Physical>, uy: &Array2<Self::Physical>) {
+                self.zero_rhs();
+                // + old field
+                self.rhs += &self.temp.to_ortho();
+                // + diffusion bc contribution
+                if let Some(field) = &self.fieldbc {
+                    self.rhs += &(field.gradient([2, 0], Some(self.scale)) * self.dt * self.ka);
+                    self.rhs += &(field.gradient([0, 2], Some(self.scale)) * self.dt * self.ka);
+                }
+                // + convection
+                let conv = self.conv_temp(ux, uy);
+                self.rhs -= &(conv * self.dt);
+                // solve lhs
+                self.solver[2].solve(&self.rhs, &mut self.temp.vhat, 0);
+            }
+
+            /// Correct velocity field.
+            /// $$
+            /// uxnew = ux - c*dpdx
+            /// $$
+            /// uynew = uy - c*dpdy
+            /// $$
+            #[allow(clippy::similar_names)]
+            fn project_velocity(&mut self, c: f64) {
+                let dpdx = self.pres[1].gradient([1, 0], Some(self.scale));
+                let dpdy = self.pres[1].gradient([0, 1], Some(self.scale));
+                let ux_old = self.ux.vhat.clone();
+                let uy_old = self.uy.vhat.clone();
+                self.ux.from_ortho(&dpdx);
+                self.uy.from_ortho(&dpdy);
+                let cinto: Self::Spectral = (-c).into();
+                self.ux.vhat *= cinto;
+                self.uy.vhat *= cinto;
+                self.ux.vhat += &ux_old;
+                self.uy.vhat += &uy_old;
+            }
+
+            /// Divergence: duxdx + duydy
+            fn divergence(&mut self) -> Array2<Self::Spectral> {
+                self.zero_rhs();
+                self.rhs += &self.ux.gradient([1, 0], Some(self.scale));
+                self.rhs += &self.uy.gradient([0, 1], Some(self.scale));
+                self.rhs.to_owned()
+            }
+
+            /// Solve pressure poisson equation
+            /// $$
+            /// D2 pres = f
+            /// $$
+            /// pseu: pseudo pressure ( in code it is pres\[1\] )
+            fn solve_pres(&mut self, f: &Array2<Self::Spectral>) {
+                //self.pres[1].vhat.assign(&self.solver[3].solve(&f));
+                self.solver[3].solve(&f, &mut self.pres[1].vhat, 0);
+                // Singularity
+                self.pres[1].vhat[[0, 0]] = Self::Spectral::zero();
+            }
+
+            fn update_pres(&mut self, div: &Array2<Self::Spectral>) {
+                self.pres[0].vhat = &self.pres[0].vhat - &(div * self.nu);
+                let inv_dt: Self::Spectral = (1. / self.dt).into();
+                self.pres[0].vhat = &self.pres[0].vhat + &(&self.pres[1].to_ortho() * inv_dt);
+            }
+        }
+    };
 }
 
-impl Integrate for Navier2D {
-    ///         Update Navier Stokes
+impl_navier_convection!(f64);
+impl_navier_convection!(Complex<f64>);
+
+impl<S> Integrate for Navier2D<f64, S>
+where
+    S: BaseSpace<f64, 2, Physical = f64, Spectral = f64>,
+{
+    /// Update 1 timestep
     fn update(&mut self) {
         // Buoyancy
         let mut that = self.temp.to_ortho();
         if let Some(field) = &self.fieldbc {
-            that += &field.to_ortho();
+            that = &that + &field.to_ortho();
         }
 
         // Convection Veclocity
@@ -546,7 +616,7 @@ impl Integrate for Navier2D {
         self.dt
     }
 
-    fn write(&mut self) {
+    fn callback(&mut self) {
         use std::io::Write;
 
         // Write hdf5 file
@@ -558,10 +628,10 @@ impl Integrate for Navier2D {
             if (self.time % dt_save) < self.dt / 2.
                 || (self.time % dt_save) > dt_save - self.dt / 2.
             {
-                self.write_to_file(&fname);
+                self.write(&fname, None);
             }
         } else {
-            self.write_to_file(&fname);
+            self.write(&fname, None);
         }
 
         // I/O
@@ -617,20 +687,46 @@ fn norm_l2(array: &Array2<f64>) -> f64 {
     array.iter().map(|x| x.powi(2)).sum::<f64>().sqrt()
 }
 
-impl Navier2D {
-    /// Read from existing file
-    ///
-    /// ## Panics
-    /// Panics if file cannot be read.
-    pub fn read(&mut self, fname: &str) {
-        // Field
-        self.temp.read(&fname, Some("temp"));
-        self.ux.read(&fname, Some("ux"));
-        self.uy.read(&fname, Some("uy"));
-        self.pres[0].read(&fname, Some("pres"));
-        // Read scalars
-        self.time = read_scalar_from_hdf5::<f64>(&fname, "time", None).unwrap();
-        println!(" <== {:?}", fname);
+impl<T, S> Navier2D<T, S>
+where
+    S: BaseSpace<f64, 2, Physical = f64, Spectral = T>,
+    T: Scalar + Mul<f64, Output = T> + Div<f64, Output = T>,
+{
+    /// Returns Nusselt number (heat flux at the plates)
+    /// $$
+    /// Nu = \langle - dTdz \rangle\\_x (0/H))
+    /// $$
+    pub fn eval_nu(&mut self) -> f64 {
+        use super::functions::eval_nu;
+        eval_nu(&mut self.temp, &mut self.field, &self.fieldbc, &self.scale)
+    }
+
+    /// Returns volumetric Nusselt number
+    /// $$
+    /// Nuvol = \langle uy*T/kappa - dTdz \rangle\\_V
+    /// $$
+    pub fn eval_nuvol(&mut self) -> f64 {
+        use super::functions::eval_nuvol;
+        eval_nuvol(
+            &mut self.temp,
+            &mut self.uy,
+            &mut self.field,
+            &self.fieldbc,
+            self.ka,
+            &self.scale,
+        )
+    }
+
+    /// Returns Reynolds number based on kinetic energy
+    pub fn eval_re(&mut self) -> f64 {
+        use super::functions::eval_re;
+        eval_re(
+            &mut self.ux,
+            &mut self.uy,
+            &mut self.field,
+            self.nu,
+            &self.scale,
+        )
     }
 
     /// Initialize velocity with fourier modes
@@ -648,43 +744,81 @@ impl Navier2D {
         apply_cos_sin(&mut self.temp, -amp, m, n);
     }
 
-    /// Write fields to hdf5 file
-    pub fn write_to_file(&mut self, fname: &str) {
-        self.temp.backward();
-        self.ux.backward();
-        self.uy.backward();
-        self.pres[0].backward();
-        // Add boundary contribution
-        if let Some(x) = &self.fieldbc {
-            self.temp.v = &self.temp.v + &x.v;
-        }
-        // Field
-        self.temp.write(&fname, Some("temp"));
-        self.ux.write(&fname, Some("ux"));
-        self.uy.write(&fname, Some("uy"));
-        self.pres[0].write(&fname, Some("pres"));
-        // Write scalars
-        write_scalar_to_hdf5(&fname, "time", None, self.time).ok();
-        write_scalar_to_hdf5(&fname, "ra", None, self.ra).ok();
-        write_scalar_to_hdf5(&fname, "pr", None, self.pr).ok();
-        write_scalar_to_hdf5(&fname, "nu", None, self.nu).ok();
-        write_scalar_to_hdf5(&fname, "kappa", None, self.ka).ok();
-        // Undo addition of bc
-        if self.fieldbc.is_some() {
-            self.temp.backward();
-        }
-
-        println!(" ==> {:?}", fname);
-    }
-
     /// Reset time
     pub fn reset_time(&mut self) {
         self.time = 0.;
     }
 }
 
+macro_rules! impl_read_write_navier {
+    ($s: ty) => {
+        impl<S> ReadField for Navier2D<$s, S>
+        where
+            S: BaseSpace<f64, 2, Physical = f64, Spectral = $s>,
+        {
+            fn read(&mut self, filename: &str, _group: Option<&str>) {
+                // Field
+                self.temp.read(&filename, Some("temp"));
+                self.ux.read(&filename, Some("ux"));
+                self.uy.read(&filename, Some("uy"));
+                self.pres[0].read(&filename, Some("pres"));
+                // Read scalars
+                self.time = read_scalar_from_hdf5::<f64>(&filename, "time", None).unwrap();
+                println!(" <== {:?}", filename);
+            }
+        }
+
+        impl<S> WriteField for Navier2D<$s, S>
+        where
+            S: BaseSpace<f64, 2, Physical = f64, Spectral = $s>,
+        {
+            /// Write Field data to hdf5 file
+            fn write(&mut self, filename: &str, group: Option<&str>) {
+                let result = self.write_return_result(filename, group);
+                match result {
+                    Ok(_) => (),
+                    Err(_) => println!("Error while writing file {:?}.", filename),
+                }
+            }
+
+            fn write_return_result(&mut self, filename: &str, _group: Option<&str>) -> Result<()> {
+                self.temp.backward();
+                self.ux.backward();
+                self.uy.backward();
+                self.pres[0].backward();
+                // Add boundary contribution
+                if let Some(x) = &self.fieldbc {
+                    self.temp.v = &self.temp.v + &x.v;
+                }
+                // Field
+                self.temp.write(&filename, Some("temp"));
+                self.ux.write(&filename, Some("ux"));
+                self.uy.write(&filename, Some("uy"));
+                self.pres[0].write(&filename, Some("pres"));
+                // Write scalars
+                write_scalar_to_hdf5(&filename, "time", None, self.time)?;
+                write_scalar_to_hdf5(&filename, "ra", None, self.ra)?;
+                write_scalar_to_hdf5(&filename, "pr", None, self.pr)?;
+                write_scalar_to_hdf5(&filename, "nu", None, self.nu)?;
+                write_scalar_to_hdf5(&filename, "kappa", None, self.ka)?;
+                // Undo addition of bc
+                if self.fieldbc.is_some() {
+                    self.temp.backward();
+                }
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_read_write_navier!(f64);
+impl_read_write_navier!(Complex<f64>);
+
 /// Construct field f(x,y) = amp \* sin(pi\*m)cos(pi\*n)
-pub fn apply_sin_cos(field: &mut Field2, amp: f64, m: f64, n: f64) {
+pub fn apply_sin_cos<S, T2>(field: &mut Field2<T2, S>, amp: f64, m: f64, n: f64)
+where
+    S: BaseSpace<f64, 2, Physical = f64, Spectral = T2>,
+{
     use std::f64::consts::PI;
     let nx = field.v.shape()[0];
     let ny = field.v.shape()[1];
@@ -703,7 +837,10 @@ pub fn apply_sin_cos(field: &mut Field2, amp: f64, m: f64, n: f64) {
 }
 
 /// Construct field f(x,y) = amp \* cos(pi\*m)sin(pi\*n)
-pub fn apply_cos_sin(field: &mut Field2, amp: f64, m: f64, n: f64) {
+pub fn apply_cos_sin<S, T2>(field: &mut Field2<T2, S>, amp: f64, m: f64, n: f64)
+where
+    S: BaseSpace<f64, 2, Physical = f64, Spectral = T2>,
+{
     use std::f64::consts::PI;
     let nx = field.v.shape()[0];
     let ny = field.v.shape()[1];

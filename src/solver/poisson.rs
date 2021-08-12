@@ -19,15 +19,11 @@
 //! banded after multiplication with the pseudoinverse
 //! of D2 (B2). In this case, the second equation is
 //! solved, with A = B2.
-
-use super::utils::vec_to_array;
-use super::{FdmaTensor, MatVec};
-use crate::bases::BaseBasics;
-use crate::bases::LaplacianInverse;
-use crate::bases::SpaceBase;
-use crate::solver::{Solve, SolveReturn};
-use crate::Base;
-use crate::SolverScalar;
+use super::{MatVec, MatVecFdma, SolverScalar};
+use crate::bases::BaseSpace;
+use crate::field::FieldBase;
+use crate::solver::utils::vec_to_array;
+use crate::solver::{FdmaTensor, Solve, SolveReturn};
 use ndarray::prelude::*;
 use std::ops::{Add, Div, Mul};
 
@@ -39,107 +35,164 @@ pub struct Poisson<T, const N: usize> {
 }
 
 impl<const N: usize> Poisson<f64, N> {
-    /// Construct Poisson solver from field
-    pub fn from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Self {
-        let solver = Self::solver_from_space(space, c);
-        let matvec: Vec<Option<MatVec<f64>>> = space
-            .bases
-            .iter()
-            .map(|base| Self::matvec_from_base(base))
-            .collect();
+    /// Construct Poisson solver from field:
+    ///
+    ///  [(D2x x Iy) + (Ix x D2y)] vhat = [(Ax x Iy) + (Ix + Ay)] f
+    ///
+    /// Multiplication with right side is only necessary for bases
+    /// who need a preconditioner to make the laplacian banded, like
+    /// chebyshev bases.
+    ///
+    /// Bases are diagonal, when there laplacian is a diagonal matrix.
+    /// This is the case for fourier bases. Other bases will be made
+    /// diagonal by an eigendecomposition. This is entirely done in
+    /// the `FdmaTensor` solver.
+    pub fn new<T2, S>(field: &FieldBase<f64, f64, T2, S, N>, c: [f64; N]) -> Self
+    where
+        S: BaseSpace<f64, N, Physical = f64, Spectral = T2>,
+    {
+        // Gather matrices and preconditioner
+        let mut laplacians: Vec<Array2<f64>> = Vec::new();
+        let mut masses: Vec<Array2<f64>> = Vec::new();
+        let mut is_diags: Vec<bool> = Vec::new();
+        let mut matvec: Vec<Option<MatVec<f64>>> = Vec::new();
+        for axis in 0..N {
+            // Matrices and preconditioner
+            let (mat_a, mat_b, precond, is_diag) = field.ingredients_for_poisson(axis);
+            let mass = mat_a;
+            let laplacian = mat_b * c[axis];
+            let matvec_axis = if let Some(x) = precond {
+                Some(MatVec::MatVecFdma(MatVecFdma::new(&x)))
+            } else {
+                None
+            };
 
-        Self { solver, matvec }
-    }
+            laplacians.push(laplacian);
+            masses.push(mass);
+            matvec.push(matvec_axis);
+            is_diags.push(is_diag);
+        }
 
-    // Construct solver, depending on bases
-    fn solver_from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Box<FdmaTensor<f64, N>> {
-        // a
-        let vec = Self::get_a_from_space(space, c);
-        let a = vec_to_array::<&Array2<f64>, N>(vec.iter().collect());
-        // c
-        let vec = Self::get_c_from_space(space, c);
-        let arr_c = vec_to_array::<&Array2<f64>, N>(vec.iter().collect());
-        // is_diag
-        let vec = Self::get_is_diag_from_space(space);
-        let is_diag = vec_to_array::<&bool, N>(vec.iter().collect());
+        // Vectors -> Arrays
+        let laplacians = vec_to_array::<&Array2<f64>, N>(laplacians.iter().collect());
+        let masses = vec_to_array::<&Array2<f64>, N>(masses.iter().collect());
+        let is_diag = vec_to_array::<&bool, N>(is_diags.iter().collect());
 
-        let mut solver = FdmaTensor::from_matrix(a, arr_c, is_diag);
-
+        // Solver
+        let mut solver = FdmaTensor::from_matrix(laplacians, masses, is_diag);
         // Handle singularity (2D)
         if N == 2 && solver.lam[0][0].abs() < 1e-10 {
             solver.lam[0] -= 1e-10;
             println!("Poisson seems singular! Eigenvalue 0 is manipulated to help out.");
         }
-        Box::new(solver)
-    }
-
-    /// a refers to A of multidimensional case, see explanation of Poisson.
-    fn get_a_from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Vec<Array2<f64>> {
-        space
-            .bases
-            .iter()
-            .zip(c.iter())
-            .map(|(base, c)| Self::matrix_from_base(base, *c).0)
-            .collect()
-    }
-
-    /// c refers to C of multidimensional case, see explanation of Poisson.
-    /// Only used for N > 1.
-    fn get_c_from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Vec<Array2<f64>> {
-        space
-            .bases
-            .iter()
-            .zip(c.iter())
-            .map(|(base, c)| Self::matrix_from_base(base, *c).1)
-            .collect()
-    }
-
-    fn get_is_diag_from_space(space: &SpaceBase<f64, N>) -> Vec<bool> {
-        space.bases.iter().map(|base| Self::is_diag(base)).collect()
-    }
-
-    fn is_diag(base: &Base<f64>) -> bool {
-        match base {
-            Base::Chebyshev(_) | Base::CompositeChebyshev(_) => false,
-            Base::FourierC2c(_) | Base::FourierR2c(_) => true,
+        // let solver = Box::new(solver);
+        Self {
+            solver: Box::new(solver),
+            matvec,
         }
     }
 
-    /// Returns the solver for the lhs, depending on the base
-    fn matrix_from_base(base: &Base<f64>, c: f64) -> (Array2<f64>, Array2<f64>) {
-        let mass = base.mass();
-        let lap = base.laplace();
-        let pinv = base.laplace_inv();
-        let eye = base.laplace_inv_eye();
-        let c_t: f64 = c;
-        match base {
-            Base::Chebyshev(_) => (
-                eye.dot(&mass) * c_t,
-                (eye.dot(&pinv)).dot(&mass.slice(s![.., 2..])),
-            ),
-            Base::CompositeChebyshev(_) => (eye.dot(&mass) * c_t, (eye.dot(&pinv)).dot(&mass)),
-            Base::FourierC2c(_) | Base::FourierR2c(_) => {
-                // println!("Not to me: Manipulate Laplacian in Poisson. Find better solution!!");
-                // lap[[0, 0]] = 1e-10;
-                (lap * c_t, mass)
-            }
-        }
-    }
+    // /// Construct Poisson solver from field
+    // pub fn from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Self {
+    //     let solver = Self::solver_from_space(space, c);
+    //     let matvec: Vec<Option<MatVec<f64>>> = space
+    //         .bases
+    //         .iter()
+    //         .map(|base| Self::matvec_from_base(base))
+    //         .collect();
 
-    /// Returns the solver for the rhs, depending on the base
-    #[allow(clippy::unnecessary_wraps)]
-    fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<f64>> {
-        use crate::solver::MatVecFdma;
-        match base {
-            Base::Chebyshev(_) | Base::CompositeChebyshev(_) => {
-                let pinv = base.laplace_inv();
-                let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
-                let matvec = MatVec::MatVecFdma(MatVecFdma::new(&mat));
-                Some(matvec)
-            }
-            Base::FourierC2c(_) | Base::FourierR2c(_) => None,
-        }
-    }
+    //     Self { solver, matvec }
+    // }
+
+    // // Construct solver, depending on bases
+    // fn solver_from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Box<FdmaTensor<f64, N>> {
+    //     // a
+    //     let vec = Self::get_a_from_space(space, c);
+    //     let a = vec_to_array::<&Array2<f64>, N>(vec.iter().collect());
+    //     // c
+    //     let vec = Self::get_c_from_space(space, c);
+    //     let arr_c = vec_to_array::<&Array2<f64>, N>(vec.iter().collect());
+    //     // is_diag
+    //     let vec = Self::get_is_diag_from_space(space);
+    //     let is_diag = vec_to_array::<&bool, N>(vec.iter().collect());
+
+    //     let mut solver = FdmaTensor::from_matrix(a, arr_c, is_diag);
+
+    //     // Handle singularity (2D)
+    //     if N == 2 && solver.lam[0][0].abs() < 1e-10 {
+    //         solver.lam[0] -= 1e-10;
+    //         println!("Poisson seems singular! Eigenvalue 0 is manipulated to help out.");
+    //     }
+    //     Box::new(solver)
+    // }
+
+    // /// a refers to A of multidimensional case, see explanation of Poisson.
+    // fn get_a_from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Vec<Array2<f64>> {
+    //     space
+    //         .bases
+    //         .iter()
+    //         .zip(c.iter())
+    //         .map(|(base, c)| Self::matrix_from_base(base, *c).0)
+    //         .collect()
+    // }
+
+    // /// c refers to C of multidimensional case, see explanation of Poisson.
+    // /// Only used for N > 1.
+    // fn get_c_from_space(space: &SpaceBase<f64, N>, c: [f64; N]) -> Vec<Array2<f64>> {
+    //     space
+    //         .bases
+    //         .iter()
+    //         .zip(c.iter())
+    //         .map(|(base, c)| Self::matrix_from_base(base, *c).1)
+    //         .collect()
+    // }
+
+    // fn get_is_diag_from_space(space: &SpaceBase<f64, N>) -> Vec<bool> {
+    //     space.bases.iter().map(|base| Self::is_diag(base)).collect()
+    // }
+
+    // fn is_diag(base: &Base<f64>) -> bool {
+    //     match base {
+    //         Base::Chebyshev(_) | Base::CompositeChebyshev(_) => false,
+    //         Base::FourierC2c(_) | Base::FourierR2c(_) => true,
+    //     }
+    // }
+
+    // /// Returns the solver for the lhs, depending on the base
+    // fn matrix_from_base(base: &Base<f64>, c: f64) -> (Array2<f64>, Array2<f64>) {
+    //     let mass = base.mass();
+    //     let lap = base.laplace();
+    //     let pinv = base.laplace_inv();
+    //     let eye = base.laplace_inv_eye();
+    //     let c_t: f64 = c;
+    //     match base {
+    //         Base::Chebyshev(_) => (
+    //             eye.dot(&mass) * c_t,
+    //             (eye.dot(&pinv)).dot(&mass.slice(s![.., 2..])),
+    //         ),
+    //         Base::CompositeChebyshev(_) => (eye.dot(&mass) * c_t, (eye.dot(&pinv)).dot(&mass)),
+    //         Base::FourierC2c(_) | Base::FourierR2c(_) => {
+    //             // println!("Not to me: Manipulate Laplacian in Poisson. Find better solution!!");
+    //             // lap[[0, 0]] = 1e-10;
+    //             (lap * c_t, mass)
+    //         }
+    //     }
+    // }
+
+    // /// Returns the solver for the rhs, depending on the base
+    // #[allow(clippy::unnecessary_wraps)]
+    // fn matvec_from_base(base: &Base<f64>) -> Option<MatVec<f64>> {
+    //     use crate::solver::MatVecFdma;
+    //     match base {
+    //         Base::Chebyshev(_) | Base::CompositeChebyshev(_) => {
+    //             let pinv = base.laplace_inv();
+    //             let mat = pinv.slice(ndarray::s![2.., ..]).to_owned();
+    //             let matvec = MatVec::MatVecFdma(MatVecFdma::new(&mat));
+    //             Some(matvec)
+    //         }
+    //         Base::FourierC2c(_) | Base::FourierR2c(_) => None,
+    //     }
+    // }
 }
 
 #[allow(unused_variables)]
@@ -204,7 +257,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{Field, Field1, Field2, Field2Complex};
+    use crate::field::{Field1, Field2, Space1, Space2};
     use crate::{cheb_dirichlet, fourier_r2c};
     use ndarray::array;
     use num_complex::Complex;
@@ -239,9 +292,9 @@ mod tests {
     #[test]
     fn test_poisson1d() {
         let nx = 8;
-        let bases = [cheb_dirichlet::<f64>(nx)];
-        let field = Field1::new(&bases);
-        let poisson = Poisson::from_space(&field.space, [1.0]);
+        let space = Space1::new(&cheb_dirichlet(nx));
+        let field = Field1::new(&space);
+        let poisson = Poisson::new(&field, [1.0]);
         let mut b: Array1<f64> = Array1::zeros(nx);
         let mut x = Array1::<f64>::zeros(nx - 2);
         for (i, bi) in b.iter_mut().enumerate() {
@@ -259,9 +312,9 @@ mod tests {
     #[test]
     fn test_poisson2d() {
         let (nx, ny) = (8, 7);
-        let bases = [cheb_dirichlet::<f64>(nx), cheb_dirichlet::<f64>(ny)];
-        let field = Field2::new(&bases);
-        let poisson = Poisson::from_space(&field.space, [1.0, 1.0]);
+        let space = Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(ny));
+        let field = Field2::new(&space);
+        let poisson = Poisson::new(&field, [1.0, 1.0]);
         let mut x = Array2::<f64>::zeros((nx - 2, ny - 2));
         let b: Array2<f64> = array![
             [1., 2., 3., 4., 5., 6., 7.],
@@ -292,9 +345,9 @@ mod tests {
     #[test]
     fn test_poisson2d_complex() {
         let (nx, ny) = (8, 7);
-        let bases = [cheb_dirichlet::<f64>(nx), cheb_dirichlet::<f64>(ny)];
-        let field = Field2::new(&bases);
-        let poisson = Poisson::from_space(&field.space, [1.0, 1.0]);
+        let space = Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(ny));
+        let field = Field2::new(&space);
+        let poisson = Poisson::new(&field, [1.0, 1.0]);
         let mut x_cmpl = Array2::<Complex<f64>>::zeros((nx - 2, ny - 2));
         let b: Array2<f64> = array![
             [1., 2., 3., 4., 5., 6., 7.],
@@ -329,11 +382,11 @@ mod tests {
     fn test_poisson2d_cd_cd() {
         // Init
         let (nx, ny) = (8, 7);
-        let bases = [cheb_dirichlet::<f64>(nx), cheb_dirichlet::<f64>(ny)];
-        let mut field = Field2::new(&bases);
-        let poisson = Poisson::from_space(&field.space, [1.0, 1.0]);
-        let x = bases[0].coords();
-        let y = bases[1].coords();
+        let space = Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(ny));
+        let mut field = Field2::new(&space);
+        let poisson = Poisson::new(&field, [1.0, 1.0]);
+        let x = &field.x[0];
+        let y = &field.x[1];
 
         // Analytical field and solution
         let n = std::f64::consts::PI / 2.;
@@ -361,11 +414,11 @@ mod tests {
     fn test_poisson2d_fo_cd() {
         // Init
         let (nx, ny) = (16, 7);
-        let bases = [fourier_r2c::<f64>(nx), cheb_dirichlet::<f64>(ny)];
-        let mut field = Field2Complex::new(&bases);
-        let poisson = Poisson::from_space(&field.space, [1.0, 1.0]);
-        let x = bases[0].coords();
-        let y = bases[1].coords();
+        let space = Space2::new(&fourier_r2c(nx), &cheb_dirichlet(ny));
+        let mut field = Field2::new(&space);
+        let poisson = Poisson::new(&field, [1.0, 1.0]);
+        let x = &field.x[0];
+        let y = &field.x[1];
 
         // Analytical field and solution
         let n = std::f64::consts::PI / 2.;

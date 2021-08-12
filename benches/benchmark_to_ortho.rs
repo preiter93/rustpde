@@ -10,7 +10,8 @@ pub fn bench_to_ortho(c: &mut Criterion) {
     for n in SIZES.iter() {
         let cdx = cheb_dirichlet::<f64>(*n);
         let cdy = cheb_dirichlet::<f64>(*n);
-        let mut field = Field2::new(&[cdx, cdy]);
+        let space = Space2::new(&cdx, &cdy);
+        let mut field = Field2::new(&space);
         for (i, v) in field.vhat.iter_mut().enumerate() {
             *v = i as f64;
         }
@@ -27,7 +28,8 @@ pub fn bench_from_ortho(c: &mut Criterion) {
     for n in SIZES.iter() {
         let cdx = cheb_dirichlet::<f64>(*n);
         let cdy = cheb_dirichlet::<f64>(*n);
-        let mut field = Field2::new(&[cdx, cdy]);
+        let space = Space2::new(&cdx, &cdy);
+        let mut field = Field2::new(&space);
         for (i, v) in field.v.iter_mut().enumerate() {
             *v = i as f64;
         }

@@ -6,7 +6,7 @@ from utils.colors import *
 
 global_settings = {
     "fps": None,
-    "duration": 5,  # time in seconds; determines fps
+    "duration": 10,  # time in seconds; determines fps
     "filename": "data/anim.mp4",
     "gifname": "data/anim.gif",
 }
