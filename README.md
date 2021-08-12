@@ -24,15 +24,15 @@ satisfy the needed boundary conditions, this is often called a Galerkin method.
 ### Implemented solver
 
 - `2-D Rayleigh Benard Convection: Direct numerical simulation`,
-see [`integrate::navier`]
+see [`examples::navier`]
 - `2-D Rayleigh Benard Convection: Steady state solver`,
-see [`integrate::navier_adjoint`]
+see [`examples::navier_adjoint`]
 
 ## Example
 Solve 2-D Rayleigh Benard Convection ( Run with `cargo run --release` )
 ```rust
 use rustpde::integrate;
-use rustpde::integrate::Navier2D;
+use rustpde::examples::Navier2D;
 use rustpde::Integrate;
 
 fn main() {

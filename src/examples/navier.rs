@@ -20,7 +20,7 @@
 //!     // Set initial conditions
 //!     navier.set_velocity(0.2, 1., 1.);
 //!     // // Want to restart?
-//!     // navier.read("data/flow100.000.h5");
+//!     // navier.read("data/flow100.000.h5"", None);
 //!     // Write first field
 //!     navier.callback();
 //!     integrate(&mut navier, 100., Some(1.0));
@@ -31,8 +31,7 @@ use crate::bases::fourier_r2c;
 use crate::bases::{cheb_dirichlet, cheb_dirichlet_bc, cheb_neumann, chebyshev};
 use crate::bases::{BaseR2c, BaseR2r};
 use crate::field::{BaseSpace, Field2, ReadField, Space2, WriteField};
-use crate::hdf5::Result;
-use crate::hdf5::{read_scalar_from_hdf5, write_scalar_to_hdf5};
+use crate::hdf5::{read_scalar_from_hdf5, write_scalar_to_hdf5, Result};
 use crate::solver::{Hholtz, Poisson, Solve, SolverField};
 use crate::types::Scalar;
 use crate::Integrate;
@@ -761,10 +760,10 @@ macro_rules! impl_integrate_for_navier {
                     if (self.time % dt_save) < self.dt / 2.
                         || (self.time % dt_save) > dt_save - self.dt / 2.
                     {
-                        self.write(&fname, None);
+                        self.write(&fname);
                     }
                 } else {
-                    self.write(&fname, None);
+                    self.write(&fname);
                 }
 
                 // I/O
@@ -897,11 +896,12 @@ where
 
 macro_rules! impl_read_write_navier {
     ($s: ty) => {
-        impl<S> ReadField for Navier2D<$s, S>
+        impl<S> Navier2D<$s, S>
         where
             S: BaseSpace<f64, 2, Physical = f64, Spectral = $s>,
         {
-            fn read(&mut self, filename: &str, _group: Option<&str>) {
+            /// Restart from file
+            pub fn read(&mut self, filename: &str) {
                 // Field
                 self.temp.read(&filename, Some("temp"));
                 self.ux.read(&filename, Some("ux"));
@@ -911,22 +911,17 @@ macro_rules! impl_read_write_navier {
                 self.time = read_scalar_from_hdf5::<f64>(&filename, "time", None).unwrap();
                 println!(" <== {:?}", filename);
             }
-        }
 
-        impl<S> WriteField for Navier2D<$s, S>
-        where
-            S: BaseSpace<f64, 2, Physical = f64, Spectral = $s>,
-        {
             /// Write Field data to hdf5 file
-            fn write(&mut self, filename: &str, group: Option<&str>) {
-                let result = self.write_return_result(filename, group);
+            pub fn write(&mut self, filename: &str) {
+                let result = self.write_return_result(filename);
                 match result {
-                    Ok(_) => (),
+                    Ok(_) => println!(" ==> {:?}", filename),
                     Err(_) => println!("Error while writing file {:?}.", filename),
                 }
             }
 
-            fn write_return_result(&mut self, filename: &str, _group: Option<&str>) -> Result<()> {
+            fn write_return_result(&mut self, filename: &str) -> Result<()> {
                 self.temp.backward();
                 self.ux.backward();
                 self.uy.backward();
