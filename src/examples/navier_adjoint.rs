@@ -718,7 +718,8 @@ macro_rules! impl_integrate {
                 std::fs::create_dir_all("data").unwrap();
 
                 // Write flow field
-                let fname = format!("data/adjoint{:.*}.h5", 3, self.time);
+                //let fname = format!("data/adjoint{:.*}.h5", 3, self.time);
+                let fname = format!("data/adjoint{:0>8.3}.h5", self.time);
                 if let Some(dt_save) = &self.write_intervall {
                     if (self.time % dt_save) < self.dt / 2.
                         || (self.time % dt_save) > dt_save - self.dt / 2.

@@ -125,7 +125,7 @@ where
     /// Gradient
     // #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
     pub fn gradient(&self, deriv: [usize; N], scale: Option<[A; N]>) -> Array<T2, Dim<[usize; N]>> {
-        self.space.gradient(&self.vhat, deriv, scale)
+        self.space.gradient_par(&self.vhat, deriv, scale)
     }
 
     /// Generate grid deltas from coordinates

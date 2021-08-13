@@ -257,8 +257,7 @@ dependencies = [
 [[package]]
 name = "funspace"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89f2605ad1dc5242817cefac1ae4d05cd7762f4cdc17d15ad60edfb8c17719c0"
+source = "git+https://github.com/preiter93/funspace?branch=main#b31d70ed5bba3a9ee9ead70d2847f0153fc0973e"
 dependencies = [
  "enum_dispatch",
  "ndarray",
