@@ -226,7 +226,7 @@ where
         let mut output = Array2::zeros((m, n));
         Zip::from(output.lanes_mut(Axis(axis)))
             .and(input.lanes(Axis(axis)))
-            .par_for_each(|mut out, inp| self.solve_lane(&inp, &mut out));
+            .for_each(|mut out, inp| self.solve_lane(&inp, &mut out));
         output
 
         // if axis == 0 {
