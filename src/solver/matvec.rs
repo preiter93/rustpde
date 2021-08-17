@@ -1,10 +1,10 @@
 //! Collection of (sparse) matrix/vector products
 use super::{SolveReturn, SolverScalar};
 use ndarray::Data;
+use ndarray::Zip;
 use ndarray::{prelude::*, DataMut};
 use num_traits::Zero;
 use std::ops::{Add, Div, Mul};
-use ndarray::Zip;
 
 /// Collection of Matrix-Vector Product Solver
 //#[enum_dispatch(SolveReturn<A, D>)]
@@ -218,37 +218,32 @@ where
     where
         S1: Data<Elem = A>,
     {
-        let (m, n) = if axis == 0{
-		(self.m, input.shape()[1])
-	} else {
-		(input.shape()[0], self.m)
-	};
+        let (m, n) = if axis == 0 {
+            (self.m, input.shape()[1])
+        } else {
+            (input.shape()[0], self.m)
+        };
         let mut output = Array2::zeros((m, n));
         Zip::from(output.lanes_mut(Axis(axis)))
-                .and(input.lanes(Axis(axis)))
-                .par_for_each(|mut out, inp| self.solve_lane(&inp, &mut out));
+            .and(input.lanes(Axis(axis)))
+            .par_for_each(|mut out, inp| self.solve_lane(&inp, &mut out));
         output
-        /*
-        if axis == 0 {
-            let (m, n) = (self.m, input.shape()[1]);
-            let mut output = Array2::zeros((m, n));
-            Zip::from(output.lanes_mut(Axis(axis)))
-                .and(input.lanes(Axis(axis)))
-                .par_for_each(|mut out, inp| self.solve_lane(&inp, &mut out));
 
-            //for i in 0..n {
-            //    self.solve_lane(&input.slice(s![.., i]), &mut output.slice_mut(s![.., i]));
-            //}
-            output
-        } else {
-            let (n, m) = (self.m, input.shape()[0]);
-            let mut output = Array2::zeros((m, n));
-            for i in 0..m {
-                self.solve_lane(&input.slice(s![i, ..]), &mut output.slice_mut(s![i, ..]));
-            }
-            output
-        }
-        */
+        // if axis == 0 {
+        //     let (m, n) = (self.m, input.shape()[1]);
+        //     let mut output = Array2::zeros((m, n));
+        //     for i in 0..n {
+        //         self.solve_lane(&input.slice(s![.., i]), &mut output.slice_mut(s![.., i]));
+        //     }
+        //     output
+        // } else {
+        //     let (n, m) = (self.m, input.shape()[0]);
+        //     let mut output = Array2::zeros((m, n));
+        //     for i in 0..m {
+        //         self.solve_lane(&input.slice(s![i, ..]), &mut output.slice_mut(s![i, ..]));
+        //     }
+        //     output
+        // }
     }
 }
 

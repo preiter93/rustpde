@@ -1,33 +1,52 @@
-//use rustpde::examples::solid_cylinder_inner;
 use rustpde::examples::Navier2D;
-//
-//use rustpde::hdf5::write_to_hdf5;
+use rustpde::examples::Navier2DAdjoint;
 use rustpde::integrate;
-use rustpde::Integrate;
 //use rustpde::ReadField;
 
-// fn main() {
-//     // Parameters
-//     let (nx, ny) = (64, 64);
-//     let ra = 1e4;
-//     let pr = 1.;
-//     let adiabatic = true;
-//     let aspect = 1.0;
-//     let dt = 0.01;
-//     //let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
-//     let mut navier = Navier2DAdjoint::new(nx, ny, ra, pr, dt, adiabatic, aspect);
-//     navier.callback();
-//     integrate(&mut navier, 2.0, Some(0.50));
-// }
+fn a() {
+    // Parameters
+    let (nx, ny) = (64, 64);
+    let ra = 2e4;
+    let pr = 1.;
+    let aspect = 2.0 / std::f64::consts::PI;
+    let dt = 0.01;
+    let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
+    //let mut navier = Navier2DAdjoint::new_periodic(nx, ny, ra, pr, dt, aspect);
+    //navier.read("restart.h5");
+    navier.reset_time();
+    //navier.callback();
+    integrate(&mut navier, 300.0, Some(2.0));
+}
 
-// fn main() {
+fn main() {
+    // Parameters
+    let (nx, ny) = (64, 64);
+    let ra = 2e4;
+    let pr = 1.;
+    let dt = 0.01;
+    // let aspect = 2.0 / std::f64::consts::PI;
+    let aspects = [1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 2.2];
+    for a in aspects {
+        let aspect = a / std::f64::consts::PI;
+        let hdffile = format!("aspect{:4.2e}.h5", aspect);
+        //let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
+        let mut navier = Navier2DAdjoint::new_periodic(nx, ny, ra, pr, dt, aspect);
+        navier.read("restart.h5");
+        navier.reset_time();
+        //navier.callback();
+        integrate(&mut navier, 300.0, Some(2.0));
+        navier.write(&hdffile);
+    }
+}
+
+// fn vof() {
 //     // Parameters
 //     let (nx, ny) = (129, 129);
-//     let ra = 3e5;
+//     let ra = 7e6;
 //     let pr = 1.;
 //     let adiabatic = true;
 //     let aspect = 2.0;
-//     let dt = 0.002;
+//     let dt = 0.001;
 //     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
 //     // Set mask
 //     let mut mask = solid_cylinder_inner(&navier.temp.x[0], &navier.temp.x[1], -2.0, 0.0, 0.3);
@@ -42,18 +61,18 @@ use rustpde::Integrate;
 
 //     //let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
 //     //navier.callback();
-//     navier.read("data/flow218.000.h5");
-//     integrate(&mut navier, 320.0, Some(0.50));
+//     navier.read("data/flow00520.00.h5");
+//     integrate(&mut navier, 720.0, Some(0.50));
 // }
 
-fn main() {
-    // Parameters
-    let (nx, ny) = (1024, 513);
-    let ra = 3e4;
-    let pr = 1.;
-    //let adiabatic = true;
-    let aspect = 2.0;
-    let dt = 0.01;
-    let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
-    integrate(&mut navier, 1.0, None);
-}
+// fn main() {
+//     // Parameters
+//     let (nx, ny) = (64, 64);
+//     let ra = 3e4;
+//     let pr = 1.;
+//     //let adiabatic = true;
+//     let aspect = 2.0;
+//     let dt = 0.01;
+//     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, true, aspect);
+//     integrate(&mut navier, 1.0, Some(0.1));
+// }
