@@ -36,6 +36,7 @@ use crate::solver::{Hholtz, Poisson, Solve, SolverField};
 use crate::types::Scalar;
 use crate::Integrate;
 use ndarray::{s, Array1, Array2};
+
 use num_complex::Complex;
 use num_traits::Zero;
 use std::collections::HashMap;
@@ -291,7 +292,7 @@ impl Navier2D<f64, Space2R2r>
         // Boundary condition
         navier.set_temp_bc(Self::bc_rbc(nx, ny));
         // Initial condition
-        navier.set_velocity(0.2, 1., 1.);
+        navier.set_velocity(0.2, 2., 1.);
         // Return
         navier
     }
@@ -448,7 +449,7 @@ impl Navier2D<Complex<f64>, Space2R2c>
         // Boundary condition
         navier.set_temp_bc(Self::bc_rbc_periodic(nx, ny));
         // Initial condition
-        navier.set_velocity(0.2, 1., 1.);
+        navier.set_velocity(0.2, 2., 1.);
         // Return
         navier
     }
@@ -495,6 +496,8 @@ where
         ] {
             field.x[0] *= self.scale[0];
             field.x[1] *= self.scale[1];
+            field.dx[0] *= self.scale[0];
+            field.dx[1] *= self.scale[1];
         }
     }
 
@@ -756,7 +759,7 @@ macro_rules! impl_integrate_for_navier {
 
                 // Write flow field
                 //let fname = format!("data/flow{:.*}.h5", 3, self.time);
-                let fname = format!("data/flow{:0>8.3}.h5", self.time);
+                let fname = format!("data/flow{:0>8.2}.h5", self.time);
                 if let Some(dt_save) = &self.write_intervall {
                     if (self.time % dt_save) < self.dt / 2.
                         || (self.time % dt_save) > dt_save - self.dt / 2.
@@ -996,6 +999,20 @@ where
             field.v[[i, j]] = amp * (arg_x * x[i]).cos() * (arg_y * y[j]).sin();
         }
     }
+    field.forward();
+}
+
+/// Apply random disturbance [-c, c]
+pub fn apply_random_disturbance<S, T2>(field: &mut Field2<T2, S>, c: f64)
+where
+    S: BaseSpace<f64, 2, Physical = f64, Spectral = T2>,
+{
+    use ndarray_rand::rand_distr::Uniform;
+    use ndarray_rand::RandomExt;
+    let nx = field.v.shape()[0];
+    let ny = field.v.shape()[1];
+    let rand: Array2<f64> = Array2::random((nx, ny), Uniform::new(-c, c));
+    field.v.assign(&rand);
     field.forward();
 }
 

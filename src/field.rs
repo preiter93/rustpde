@@ -95,7 +95,7 @@ where
             v: space.ndarray_physical(),
             vhat: space.ndarray_spectral(),
             x: space.coords(),
-            dx: Self::get_dx(&space.coords()),
+            dx: Self::get_dx(&space.coords(), Self::is_periodic(space)),
         }
     }
 
@@ -132,27 +132,57 @@ where
     ///
     /// ## Panics
     /// When vec to array convection fails
-    fn get_dx(x_arr: &[Array1<A>; N]) -> [Array1<A>; N] {
+    fn get_dx(x_arr: &[Array1<A>; N], is_periodic: [bool; N]) -> [Array1<A>; N] {
         let mut dx_vec = Vec::new();
         let two = A::one() + A::one();
-        for x in x_arr.iter() {
-            let mut dx = Array1::<A>::zeros(x.len());
-            for (i, dxi) in dx.iter_mut().enumerate() {
-                let xs_left = if i == 0 {
-                    x[0]
-                } else {
-                    (x[i] + x[i - 1]) / two
-                };
-                let xs_right = if i == x.len() - 1 {
-                    x[x.len() - 1]
-                } else {
-                    (x[i + 1] + x[i]) / two
-                };
-                *dxi = xs_right - xs_left;
+        for (x, periodic) in x_arr.iter().zip(is_periodic.iter()) {
+            if *periodic {
+                let dx = Array1::<A>::from_elem(x.len(), x[2] - x[1]);
+                dx_vec.push(dx);
+            } else {
+                let mut dx = Array1::<A>::zeros(x.len());
+                for (i, dxi) in dx.iter_mut().enumerate() {
+                    let xs_left = if i == 0 {
+                        x[0]
+                    } else {
+                        (x[i] + x[i - 1]) / two
+                    };
+                    let xs_right = if i == x.len() - 1 {
+                        x[x.len() - 1]
+                    } else {
+                        (x[i + 1] + x[i]) / two
+                    };
+                    *dxi = xs_right - xs_left;
+                }
+                dx_vec.push(dx);
             }
-            dx_vec.push(dx);
         }
         dx_vec.try_into().unwrap_or_else(|v: Vec<Array1<A>>| {
+            panic!("Expected Vec of length {} but got {}", N, v.len())
+        })
+    }
+
+    /// Return true if base is periodic (used in calculating
+    /// the grid spacing)
+    fn is_periodic(space: &S) -> [bool; N] {
+        let mut is_periodic: Vec<bool> = Vec::new();
+        for axis in 0..N {
+            let x = &space.base_all()[axis];
+            let is_periodic_axis = match x {
+                BaseAll::BaseR2r(ref b) => match b {
+                    BaseR2r::Chebyshev(_) | BaseR2r::CompositeChebyshev(_) => false,
+                },
+                BaseAll::BaseR2c(ref b) => match b {
+                    BaseR2c::FourierR2c(_) => true,
+                },
+                BaseAll::BaseC2c(ref b) => match b {
+                    BaseC2c::FourierC2c(_) => true,
+                },
+            };
+            is_periodic.push(is_periodic_axis);
+        }
+
+        is_periodic.try_into().unwrap_or_else(|v: Vec<bool>| {
             panic!("Expected Vec of length {} but got {}", N, v.len())
         })
     }

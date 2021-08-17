@@ -425,10 +425,14 @@ where
         ] {
             field.x[0] *= self.scale[0];
             field.x[1] *= self.scale[1];
+            field.dx[0] *= self.scale[0];
+            field.dx[1] *= self.scale[1];
         }
         for field in &mut [&mut self.temp[1], &mut self.ux[1], &mut self.uy[1]] {
             field.x[0] *= self.scale[0];
             field.x[1] *= self.scale[1];
+            field.dx[0] *= self.scale[0];
+            field.dx[1] *= self.scale[1];
         }
     }
 
@@ -719,7 +723,7 @@ macro_rules! impl_integrate {
 
                 // Write flow field
                 //let fname = format!("data/adjoint{:.*}.h5", 3, self.time);
-                let fname = format!("data/adjoint{:0>8.3}.h5", self.time);
+                let fname = format!("data/adjoint{:0>8.2}.h5", self.time);
                 if let Some(dt_save) = &self.write_intervall {
                     if (self.time % dt_save) < self.dt / 2.
                         || (self.time % dt_save) > dt_save - self.dt / 2.
