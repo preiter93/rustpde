@@ -41,7 +41,7 @@
 //!     let adiabatic = true;
 //!     let aspect = 1.0;
 //!     let dt = 0.02;
-//!     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
+//!     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, aspect, adiabatic);
 //!     // Set initial conditions
 //!     navier.set_velocity(0.2, 1., 1.);
 //!     // // Want to restart?

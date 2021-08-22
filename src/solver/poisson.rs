@@ -315,12 +315,13 @@ mod tests {
         let y = &field.x[1];
 
         // Analytical field and solution
-        let n = std::f64::consts::PI / 2.;
+        let ny = std::f64::consts::PI / 2.;
+        let nx = 2.;
         let mut expected = field.v.clone();
         for (i, xi) in x.iter().enumerate() {
             for (j, yi) in y.iter().enumerate() {
-                field.v[[i, j]] = (xi).cos() * (n * yi).cos();
-                expected[[i, j]] = -1. / (1. + n * n) * field.v[[i, j]];
+                field.v[[i, j]] = (nx * xi).cos() * (ny * yi).cos();
+                expected[[i, j]] = -1. / (nx * nx + ny * ny) * field.v[[i, j]];
             }
         }
 
