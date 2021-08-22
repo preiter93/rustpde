@@ -172,7 +172,7 @@ pub struct Navier2DAdjoint<T, S> {
     /// residual tolerance (exit if below)
     res_tol: f64,
     /// Set true and the fields will be dealiased
-    dealias: bool,
+    pub dealias: bool,
 }
 
 impl Navier2DAdjoint<f64, Space2R2r> {
