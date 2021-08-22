@@ -185,9 +185,9 @@ pub struct Navier2D<T, S> {
     /// If none, same intervall as diagnostics
     pub write_intervall: Option<f64>,
     /// Add a solid obstacle
-    pub solid: Option<Array2<f64>>,
+    pub solid: Option<[Array2<f64>; 2]>,
     /// Set true and the fields will be dealiased
-    dealias: bool,
+    pub dealias: bool,
 }
 
 impl Navier2D<f64, Space2R2r>
@@ -544,11 +544,11 @@ macro_rules! impl_navier_convection {
                 }
                 // + solid interaction
                 if let Some(solid) = &self.solid {
-                    let eta = 1e-3;
+                    let eta = 1e-2;
                     self.temp.backward();
                     let damp = self.fieldbc.as_ref().map_or_else(
-                        || -1. / eta * solid * &self.temp.v,
-                        |field| -1. / eta * solid * &(&self.temp.v + &field.v),
+                        || -1. / eta * &solid[0] * (&self.temp.v - &solid[1]),
+                        |field| -1. / eta * &solid[0] * &(&self.temp.v + &field.v - &solid[1]),
                     );
                     conv -= &damp;
                 }
@@ -572,8 +572,8 @@ macro_rules! impl_navier_convection {
                 conv += &conv_term(&self.ux, &mut self.field, uy, [0, 1], Some(self.scale));
                 // + solid interaction
                 if let Some(solid) = &self.solid {
-                    let eta = 1e-3;
-                    let damp = -1. / eta * solid * ux;
+                    let eta = 1e-2;
+                    let damp = -1. / eta * &solid[0] * ux;
                     conv -= &damp;
                 }
                 // -> spectral space
@@ -596,8 +596,8 @@ macro_rules! impl_navier_convection {
                 conv += &conv_term(&self.uy, &mut self.field, uy, [0, 1], Some(self.scale));
                 // + solid interaction
                 if let Some(solid) = &self.solid {
-                    let eta = 1e-3;
-                    let damp = -1. / eta * solid * uy;
+                    let eta = 1e-2;
+                    let damp = -1. / eta * &solid[0] * uy;
                     conv -= &damp;
                 }
                 // -> spectral space
