@@ -16,7 +16,7 @@
 //!     let adiabatic = true;
 //!     let aspect = 1.0;
 //!     let dt = 0.02;
-//!     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
+//!     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, aspect, adiabatic);
 //!     // Set initial conditions
 //!     navier.set_velocity(0.2, 1., 1.);
 //!     // // Want to restart?
@@ -143,7 +143,7 @@ pub trait NavierConvection {
 /// let adiabatic = true;
 /// let aspect = 1.0;
 /// let dt = 0.01;
-/// let mut navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
+/// let mut navier = Navier2D::new(nx, ny, ra, pr, dt, aspect, adiabatic);
 /// // Read initial field from file
 /// // navier.read("data/flow0.000.h5");
 /// integrate(&mut navier, 0.2,  None);
@@ -186,6 +186,8 @@ pub struct Navier2D<T, S> {
     pub write_intervall: Option<f64>,
     /// Add a solid obstacle
     pub solid: Option<Array2<f64>>,
+    /// Set true and the fields will be dealiased
+    dealias: bool,
 }
 
 impl Navier2D<f64, Space2R2r>
@@ -206,9 +208,9 @@ impl Navier2D<f64, Space2R2r>
     ///
     /// * `dt` - Timestep size
     ///
-    /// * `adiabatic` - Boolean, sidewall temperature boundary condition
-    ///
     /// * `aspect` - Aspect ratio L/H
+    ///
+    /// * `adiabatic` - Boolean, sidewall temperature boundary condition
     #[allow(clippy::similar_names)]
     pub fn new(
         nx: usize,
@@ -216,8 +218,8 @@ impl Navier2D<f64, Space2R2r>
         ra: f64,
         pr: f64,
         dt: f64,
-        adiabatic: bool,
         aspect: f64,
+        adiabatic: bool,
     ) -> Navier2D<f64, Space2R2r> {
         // geometry scales
         let scale = [aspect, 1.];
@@ -287,12 +289,14 @@ impl Navier2D<f64, Space2R2r>
             diagnostics,
             write_intervall: None,
             solid: None,
+            dealias: true,
         };
         navier._scale();
         // Boundary condition
         navier.set_temp_bc(Self::bc_rbc(nx, ny));
         // Initial condition
-        navier.set_velocity(0.2, 2., 1.);
+        // navier.set_velocity(0.2, 2., 1.);
+        navier.random_disturbance(0.1);
         // Return
         navier
     }
@@ -444,12 +448,14 @@ impl Navier2D<Complex<f64>, Space2R2c>
             diagnostics,
             write_intervall: None,
             solid: None,
+            dealias: true,
         };
         navier._scale();
         // Boundary condition
         navier.set_temp_bc(Self::bc_rbc_periodic(nx, ny));
         // Initial condition
-        navier.set_velocity(0.2, 2., 1.);
+        // navier.set_velocity(0.2, 2., 1.);
+        navier.random_disturbance(0.1);
         // Return
         navier
     }
@@ -549,6 +555,9 @@ macro_rules! impl_navier_convection {
                 // -> spectral space
                 self.field.v.assign(&conv);
                 self.field.forward();
+                if self.dealias {
+                    dealias(&mut self.field);
+                }
                 self.field.vhat.to_owned()
             }
 
@@ -570,6 +579,9 @@ macro_rules! impl_navier_convection {
                 // -> spectral space
                 self.field.v.assign(&conv);
                 self.field.forward();
+                if self.dealias {
+                    dealias(&mut self.field);
+                }
                 self.field.vhat.to_owned()
             }
 
@@ -591,6 +603,9 @@ macro_rules! impl_navier_convection {
                 // -> spectral space
                 self.field.v.assign(&conv);
                 self.field.forward();
+                if self.dealias {
+                    dealias(&mut self.field);
+                }
                 self.field.vhat.to_owned()
             }
 
@@ -892,6 +907,13 @@ where
         apply_cos_sin(&mut self.temp, -amp, m, n);
     }
 
+    /// Initialize all fields with random disturbances
+    pub fn random_disturbance(&mut self, amp: f64) {
+        apply_random_disturbance(&mut self.temp, amp);
+        apply_random_disturbance(&mut self.ux, amp);
+        apply_random_disturbance(&mut self.uy, amp);
+    }
+
     /// Reset time
     pub fn reset_time(&mut self) {
         self.time = 0.;
@@ -957,6 +979,19 @@ macro_rules! impl_read_write_navier {
 
 impl_read_write_navier!(f64);
 impl_read_write_navier!(Complex<f64>);
+
+/// Dealias field (2/3 rule)
+pub fn dealias<S, T2>(field: &mut Field2<T2, S>)
+where
+    S: BaseSpace<f64, 2, Physical = f64, Spectral = T2>,
+    T2: Zero + Clone + Copy,
+{
+    let zero = T2::zero();
+    let n_x: usize = field.vhat.shape()[0] * 2 / 3;
+    let n_y: usize = field.vhat.shape()[1] * 2 / 3;
+    field.vhat.slice_mut(s![n_x.., ..]).fill(zero);
+    field.vhat.slice_mut(s![.., n_y..]).fill(zero);
+}
 
 /// Construct field f(x,y) = amp \* sin(pi\*m)cos(pi\*n)
 pub fn apply_sin_cos<S, T2>(field: &mut Field2<T2, S>, amp: f64, m: f64, n: f64)

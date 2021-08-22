@@ -17,7 +17,7 @@
 //!     let adiabatic = true;
 //!     let aspect = 1.0;
 //!     let dt = 0.02;
-//!     let mut navier_adjoint = Navier2DAdjoint::new(nx, ny, ra, pr, dt, adiabatic, aspect);
+//!     let mut navier_adjoint = Navier2DAdjoint::new(nx, ny, ra, pr, dt, aspect, adiabatic);
 //!     // Set initial conditions
 //!     navier_adjoint.set_temperature(0.5, 1., 1.);
 //!     navier_adjoint.set_velocity(0.5, 1., 1.);
@@ -35,7 +35,7 @@
 //! An adjoint-based approach for finding invariant solutions of Navier--Stokes equations
 //! J. Fluid Mech., 795, 278-312.
 use super::conv_term;
-use super::navier::{apply_cos_sin, apply_sin_cos};
+use super::navier::{apply_cos_sin, apply_sin_cos, dealias};
 use super::navier::{get_ka, get_nu, Navier2D};
 use crate::bases::fourier_r2c;
 use crate::bases::{cheb_dirichlet, cheb_neumann, chebyshev};
@@ -171,6 +171,8 @@ pub struct Navier2DAdjoint<T, S> {
     pub write_intervall: Option<f64>,
     /// residual tolerance (exit if below)
     res_tol: f64,
+    /// Set true and the fields will be dealiased
+    dealias: bool,
 }
 
 impl Navier2DAdjoint<f64, Space2R2r> {
@@ -188,9 +190,9 @@ impl Navier2DAdjoint<f64, Space2R2r> {
     ///
     /// * `dt` - Timestep size
     ///
-    /// * `adiabatic` - Boolean, sidewall temperature boundary condition
-    ///
     /// * `aspect` - Aspect ratio L/H
+    ///
+    /// * `adiabatic` - Boolean, sidewall temperature boundary condition
     #[allow(clippy::similar_names)]
     pub fn new(
         nx: usize,
@@ -198,8 +200,8 @@ impl Navier2DAdjoint<f64, Space2R2r> {
         ra: f64,
         pr: f64,
         dt: f64,
-        adiabatic: bool,
         aspect: f64,
+        adiabatic: bool,
     ) -> Navier2DAdjoint<f64, Space2R2r> {
         let scale = [aspect, 1.];
         let nu = get_nu(ra, pr, scale[1] * 2.0);
@@ -224,7 +226,7 @@ impl Navier2DAdjoint<f64, Space2R2r> {
             ]
         };
         // define underlying naver-stokes solver
-        let navier = Navier2D::new(nx, ny, ra, pr, dt, adiabatic, aspect);
+        let navier = Navier2D::new(nx, ny, ra, pr, dt, aspect, adiabatic);
         // pressure
         let pres = [
             Field2::new(&Space2::new(&chebyshev(nx), &chebyshev(ny))),
@@ -287,6 +289,7 @@ impl Navier2DAdjoint<f64, Space2R2r> {
             diagnostics,
             write_intervall: None,
             res_tol: RES_TOL,
+            dealias: true,
         };
         navier_adjoint._scale();
         // Boundary condition
@@ -400,6 +403,7 @@ impl Navier2DAdjoint<Complex<f64>, Space2R2c> {
             diagnostics,
             write_intervall: None,
             res_tol: RES_TOL,
+            dealias: true,
         };
         navier_adjoint._scale();
         // Boundary condition
@@ -484,6 +488,9 @@ macro_rules! impl_navier_convection {
                 // -> spectral space
                 self.field.v.assign(&conv);
                 self.field.forward();
+                if self.dealias {
+                    dealias(&mut self.field);
+                }
                 self.field.vhat.to_owned()
             }
 
@@ -514,6 +521,9 @@ macro_rules! impl_navier_convection {
                 // -> spectral space
                 self.field.v.assign(&conv);
                 self.field.forward();
+                if self.dealias {
+                    dealias(&mut self.field);
+                }
                 self.field.vhat.to_owned()
             }
 
@@ -530,6 +540,9 @@ macro_rules! impl_navier_convection {
                 // -> spectral space
                 self.field.v.assign(&conv);
                 self.field.forward();
+                if self.dealias {
+                    dealias(&mut self.field);
+                }
                 self.field.vhat.to_owned()
             }
 
@@ -551,6 +564,8 @@ macro_rules! impl_navier_convection {
                 // + diffusion
                 let nu = self.nu / self.scale_adjoint;
                 self.rhs += &(&self.fields_unsmoothed[0] * self.dt * nu);
+                // self.rhs += &(self.ux[1].gradient([2, 0], Some(self.scale)) * self.dt * self.nu);
+                // self.rhs += &(self.ux[1].gradient([0, 2], Some(self.scale)) * self.dt * self.nu);
                 // update ux
                 self.ux[0].from_ortho(&self.rhs);
             }
@@ -573,6 +588,8 @@ macro_rules! impl_navier_convection {
                 // + diffusion
                 let nu = self.nu / self.scale_adjoint;
                 self.rhs += &(&self.fields_unsmoothed[1] * self.dt * nu);
+                // self.rhs += &(self.uy[1].gradient([2, 0], Some(self.scale)) * self.dt * self.nu);
+                // self.rhs += &(self.uy[1].gradient([0, 2], Some(self.scale)) * self.dt * self.nu);
                 // update uy
                 self.uy[0].from_ortho(&self.rhs);
             }
@@ -591,6 +608,8 @@ macro_rules! impl_navier_convection {
                 // + diffusion
                 let ka = self.ka / self.scale_adjoint;
                 self.rhs += &(&self.fields_unsmoothed[2] * self.dt * ka);
+                // self.rhs += &(self.temp[1].gradient([2, 0], Some(self.scale)) * self.dt * self.ka);
+                // self.rhs += &(self.temp[1].gradient([0, 2], Some(self.scale)) * self.dt * self.ka);
                 // update temp
                 self.temp[0].from_ortho(&self.rhs);
             }
