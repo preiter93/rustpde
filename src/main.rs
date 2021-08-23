@@ -7,17 +7,19 @@ use rustpde::examples::solid_masks::solid_roughness_sinusoid;
 
 fn main() {
     // Parameters
-    let (nx, ny) = (256, 129);
-    let ra = 1e8;
+    let (nx, ny) = (512, 257);
+    let ra = 3e8;
     let pr = 1.;
     let aspect = 1.0;
-    let dt = 0.001;
+    let dt = 0.0002;
     let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
     // Set mask
     let mask = solid_roughness_sinusoid(&navier.temp.x[0], &navier.temp.x[1], 0.1, 10.);
     navier.solid = Some(mask);
     navier.callback();
-    integrate(&mut navier, 100.0, Some(1.0));
+    navier.read("data/flow00078.00.h5");
+    navier.write_intervall = Some(0.5);
+    integrate(&mut navier, 200.0, Some(0.1));
     // navier.write("restart.h5");
 
 

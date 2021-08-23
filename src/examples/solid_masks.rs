@@ -38,7 +38,6 @@ pub fn solid_cylinder_inner(
     radius: f64,
 ) -> [Array2<f64>; 2]{
     let mut mask = Array2::<f64>::zeros((x.len(), y.len()));
-    let mut value = Array2::<f64>::zeros((x.len(), y.len()));
     let layer_thickness = radius / 10.;
     for (i, xi) in x.iter().enumerate() {
         for (j, yi) in y.iter().enumerate() {
@@ -51,6 +50,7 @@ pub fn solid_cylinder_inner(
             }
         }
     }
+    let value = Array2::<f64>::zeros(mask.raw_dim());
     [mask, value]
 }
 
@@ -69,6 +69,7 @@ pub fn solid_roughness_sinusoid(
     for (i, xi) in x.iter().enumerate() {
         for (j, yi) in y.iter().enumerate() {
             let y_rough = height * (top - bottom) / 2. * ((wavenumber * xi).sin() + 0.5);
+            // Bottom
             let mut y_dist = yi - bottom;
             if y_dist <= y_rough {
                 mask[[i, j]] = 1.0;
@@ -78,6 +79,7 @@ pub fn solid_roughness_sinusoid(
                 mask[[i, j]] = 0.5 * (1. - (2. * (y_dist - y_rough) / layer_thickness).tanh());
                 value[[i, j]] = 0.5;
             }
+            // Top
             y_dist = top - yi;
             if y_dist <= y_rough {
                 mask[[i, j]] = 1.0;
