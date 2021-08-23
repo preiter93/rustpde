@@ -13,16 +13,16 @@ fn main() {
     let aspect = 1.0;
     let dt = 0.0002;
     let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
-    // Set mask
+    // Add roughness elements
     let mask = solid_roughness_sinusoid(&navier.temp.x[0], &navier.temp.x[1], 0.1, 10.);
     navier.solid = Some(mask);
+    // Write first flow field;
     navier.callback();
-    navier.read("data/flow00078.00.h5");
+    // navier.read("data/flow00078.00.h5");
+    // Set how often flow fields are written
     navier.write_intervall = Some(0.5);
+    // Integrate over 200 TU, save info every 0.1 TU
     integrate(&mut navier, 200.0, Some(0.1));
-    // navier.write("restart.h5");
-
-
 }
 
 // fn main() {
