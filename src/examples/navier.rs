@@ -912,6 +912,11 @@ where
         apply_random_disturbance(&mut self.temp, amp);
         apply_random_disturbance(&mut self.ux, amp);
         apply_random_disturbance(&mut self.uy, amp);
+        // Remove bc base from temp
+        if let Some(x) = &self.fieldbc {
+            self.temp.v = &self.temp.v - &x.v;
+            self.temp.forward();
+        }
     }
 
     /// Reset time
