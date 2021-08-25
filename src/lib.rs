@@ -47,7 +47,24 @@
 //!     // // Want to restart?
 //!     // navier.read("data/flow100.000.h5");
 //!     // Write first field
-//!     navier.write();
+//!     navier.callback();
+//!     integrate(&mut navier, 100., Some(1.0));
+//! }
+//! ```
+//! Solve 2-D Rayleigh Benard Convection with periodic sidewall
+//! ```ignore
+//! use rustpde::integrate;
+//! use rustpde::examples::Navier2D;
+//! use rustpde::Integrate;
+//!
+//! fn main() {
+//!     // Parameters
+//!     let (nx, ny) = (64, 64);
+//!     let ra = 1e5;
+//!     let pr = 1.;
+//!     let aspect = 1.0;
+//!     let dt = 0.02;
+//!     let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
 //!     integrate(&mut navier, 100., Some(1.0));
 //! }
 //! ```

@@ -36,7 +36,7 @@ pub fn solid_cylinder_inner(
     x0: f64,
     y0: f64,
     radius: f64,
-) -> [Array2<f64>; 2]{
+) -> [Array2<f64>; 2] {
     let mut mask = Array2::<f64>::zeros((x.len(), y.len()));
     let layer_thickness = radius / 10.;
     for (i, xi) in x.iter().enumerate() {
