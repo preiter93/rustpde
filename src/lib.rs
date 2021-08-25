@@ -3,7 +3,7 @@
 //!
 //! # Dependencies
 //! - cargo >= v1.49
-//! - `hd5` (sudo apt-get install -y libhdf5-dev)
+//! - `hdf5` (sudo apt-get install -y libhdf5-dev)
 //!
 //! # Details
 //!
@@ -15,6 +15,7 @@
 //! - `Chebyshev` (Orthonormal), see [`chebyshev()`]
 //! - `ChebDirichlet` (Composite), see [`cheb_dirichlet()`]
 //! - `ChebNeumann` (Composite), see [`cheb_neumann()`]
+//! - `FourierR2c` (Orthonormal), see [`fourier_r2c()`]
 //!
 //! Composite basis combine several basis functions of its parent space to
 //! satisfy the needed boundary conditions, this is often called a Galerkin method.

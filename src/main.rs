@@ -1,35 +1,35 @@
-use rustpde::integrate;
 use rustpde::examples::Navier2D;
+use rustpde::integrate;
 use rustpde::Integrate;
-
-// fn main() {
-//     // Parameters
-//     let (nx, ny) = (64, 64);
-//     let ra = 1e5;
-//     let pr = 1.;
-//     let adiabatic = true;
-//     let aspect = 1.0;
-//     let dt = 0.02;
-//     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, aspect, adiabatic);
-//     // Set initial conditions
-//     navier.set_velocity(0.2, 1., 1.);
-//     // // Want to restart?
-//     // navier.read("data/flow100.000.h5");
-//     // Write first field
-//     navier.callback();
-//     integrate(&mut navier, 100., Some(1.0));
-// }
 
 fn main() {
     // Parameters
     let (nx, ny) = (64, 64);
     let ra = 1e5;
     let pr = 1.;
+    let adiabatic = true;
     let aspect = 1.0;
     let dt = 0.02;
-    let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
+    let mut navier = Navier2D::new(nx, ny, ra, pr, dt, aspect, adiabatic);
+    // Set initial conditions
+    navier.set_velocity(0.2, 1., 1.);
+    // // Want to restart?
+    // navier.read("data/flow100.000.h5");
+    // Write first field
+    navier.callback();
     integrate(&mut navier, 100., Some(1.0));
 }
+
+// fn main() {
+//     // Parameters
+//     let (nx, ny) = (64, 64);
+//     let ra = 1e5;
+//     let pr = 1.;
+//     let aspect = 1.0;
+//     let dt = 0.02;
+//     let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
+//     integrate(&mut navier, 100., Some(1.0));
+// }
 
 // use rustpde::examples::solid_masks::solid_roughness_sinusoid;
 // fn roughness() {
