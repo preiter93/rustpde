@@ -22,13 +22,13 @@ fn main() {
 
 // fn main() {
 //     // Parameters
-//     let (nx, ny) = (64, 64);
-//     let ra = 1e5;
+//     let (nx, ny) = (129, 129);
+//     let ra = 1e6;
 //     let pr = 1.;
 //     let aspect = 1.0;
-//     let dt = 0.02;
+//     let dt = 0.01;
 //     let mut navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
-//     integrate(&mut navier, 100., Some(1.0));
+//     integrate(&mut navier, 10., Some(1.0));
 // }
 
 // use rustpde::examples::solid_masks::solid_roughness_sinusoid;
