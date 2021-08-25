@@ -111,7 +111,7 @@ where
 
     /// Transform from composite to orthogonal space
     pub fn to_ortho(&self) -> Array<T2, Dim<[usize; N]>> {
-        self.space.to_ortho(&self.vhat)
+        self.space.to_ortho_par(&self.vhat)
     }
 
     /// Transform from orthogonal to composite space
@@ -125,7 +125,7 @@ where
     /// Gradient
     // #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
     pub fn gradient(&self, deriv: [usize; N], scale: Option<[A; N]>) -> Array<T2, Dim<[usize; N]>> {
-        self.space.gradient(&self.vhat, deriv, scale)
+        self.space.gradient_par(&self.vhat, deriv, scale)
     }
 
     /// Generate grid deltas from coordinates
