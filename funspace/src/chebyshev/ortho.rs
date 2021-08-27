@@ -1,14 +1,18 @@
 //! # Orthogonal chebyshev space
-use super::FloatNum;
-use crate::Differentiate;
-use crate::FromOrtho;
-use crate::LaplacianInverse;
-use crate::Mass;
-use crate::Size;
-use crate::Transform;
-use crate::TransformPar;
+use crate::traits::Basics;
+use crate::traits::Differentiate;
+use crate::traits::DifferentiatePar;
+use crate::traits::FromOrtho;
+use crate::traits::FromOrthoPar;
+use crate::traits::LaplacianInverse;
+use crate::traits::Transform;
+use crate::traits::TransformKind;
+use crate::traits::TransformPar;
+use crate::types::FloatNum;
+use crate::Scalar;
 use ndarray::prelude::*;
 use ndrustfft::DctHandler;
+use num_complex::Complex;
 
 /// # Container for chebyshev space
 #[derive(Clone)]
@@ -25,6 +29,8 @@ pub struct Chebyshev<A> {
     /// chebyshev transform
     correct_dct_forward: Array1<A>,
     correct_dct_backward: Array1<A>,
+    /// Transform kind (real-to-real)
+    transform_kind: TransformKind,
 }
 
 impl<A: FloatNum> Chebyshev<A> {
@@ -57,6 +63,7 @@ impl<A: FloatNum> Chebyshev<A> {
             dct_handler: DctHandler::new(n),
             correct_dct_forward,
             correct_dct_backward,
+            transform_kind: TransformKind::RealToReal,
         }
     }
 
@@ -99,14 +106,14 @@ impl<A: FloatNum> Chebyshev<A> {
     #[allow(clippy::used_underscore_binding)]
     pub fn differentiate_lane<T, S>(&self, data: &mut ArrayBase<S, Ix1>, n_times: usize)
     where
-        T: FloatNum,
+        T: Scalar + From<A>,
         S: ndarray::Data<Elem = T> + ndarray::DataMut,
     {
-        let _2 = T::from_f64(2.).unwrap();
+        let _2 = T::one() + T::one();
         for _ in 0..n_times {
             data[0] = data[1];
             for i in 1..data.len() - 1 {
-                let _i = T::from_usize(i + 1).unwrap();
+                let _i: T = (A::from(i + 1).unwrap()).into();
                 data[i] = _2 * _i * data[i + 1];
             }
             data[self.n - 1] = T::zero();
@@ -119,6 +126,12 @@ impl<A: FloatNum> Chebyshev<A> {
 }
 
 impl<A: FloatNum> Chebyshev<A> {
+    /// Differentation Matrix see [`chebyshev::dmsuite::diffmat_chebyshev`]
+    #[allow(clippy::must_use_candidate)]
+    fn _dmat(n: usize, deriv: usize) -> Array2<A> {
+        use super::dmsuite::diffmat_chebyshev;
+        diffmat_chebyshev(n, deriv)
+    }
     /// Pseudoinverse matrix of chebyshev spectral
     /// differentiation matrices
     ///
@@ -133,7 +146,7 @@ impl<A: FloatNum> Chebyshev<A> {
     /// ndarray (n x n) matrix, acts in spectral space
     fn _pinv(n: usize, deriv: usize) -> Array2<A> {
         if deriv > 2 {
-            panic!("pinv does only support deriv's 1 & 2, got {}", deriv)
+            panic!("pinv does only support deriv's 1 & 2, got {}", deriv);
         }
         let mut pinv = Array2::<f64>::zeros([n, n]);
         if deriv == 1 {
@@ -167,18 +180,7 @@ impl<A: FloatNum> Chebyshev<A> {
     }
 }
 
-impl<A: FloatNum> Mass<A> for Chebyshev<A> {
-    /// Return mass matrix (= eye)
-    fn mass(&self) -> Array2<A> {
-        Array2::<A>::eye(self.n)
-    }
-    /// Coordinates in physical space
-    fn coords(&self) -> &Array1<A> {
-        &self.x
-    }
-}
-
-impl<A: FloatNum> Size for Chebyshev<A> {
+impl<A: FloatNum> Basics<A> for Chebyshev<A> {
     /// Size in physical space
     fn len_phys(&self) -> usize {
         self.n
@@ -187,9 +189,21 @@ impl<A: FloatNum> Size for Chebyshev<A> {
     fn len_spec(&self) -> usize {
         self.m
     }
+    /// Coordinates in physical space
+    fn coords(&self) -> &Array1<A> {
+        &self.x
+    }
+    /// Return mass matrix (= eye)
+    fn mass(&self) -> Array2<A> {
+        Array2::<A>::eye(self.n)
+    }
+    /// Return transform kind
+    fn get_transform_kind(&self) -> &TransformKind {
+        &self.transform_kind
+    }
 }
 
-impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
+impl<A: FloatNum> Transform for Chebyshev<A> {
     type Physical = A;
     type Spectral = A;
 
@@ -212,7 +226,7 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
     ) -> Array<Self::Spectral, D>
     where
         S: ndarray::Data<Elem = Self::Physical>,
-        D: Dimension + ndarray::RemoveAxis,
+        D: Dimension,
     {
         use crate::utils::array_resized_axis;
         let mut output = array_resized_axis(input, self.m, axis);
@@ -230,7 +244,7 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
     ) where
         S1: ndarray::Data<Elem = Self::Physical>,
         S2: ndarray::Data<Elem = Self::Spectral> + ndarray::DataMut,
-        D: Dimension + ndarray::RemoveAxis,
+        D: Dimension,
     {
         use crate::utils::check_array_axis;
         use ndrustfft::nddct1;
@@ -266,10 +280,10 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
     ) -> Array<Self::Physical, D>
     where
         S: ndarray::Data<Elem = Self::Spectral>,
-        D: Dimension + ndarray::RemoveAxis,
+        D: Dimension,
     {
         use crate::utils::array_resized_axis;
-        let mut output = array_resized_axis(input, self.m, axis);
+        let mut output = array_resized_axis(input, self.n, axis);
         self.backward_inplace(input, &mut output, axis);
         output
     }
@@ -287,7 +301,7 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
     ) where
         S1: ndarray::Data<Elem = Self::Spectral>,
         S2: ndarray::Data<Elem = Self::Physical> + ndarray::DataMut,
-        D: Dimension + ndarray::RemoveAxis,
+        D: Dimension,
     {
         use crate::utils::check_array_axis;
         use ndrustfft::nddct1;
@@ -306,7 +320,7 @@ impl<A: FloatNum + std::ops::MulAssign> Transform for Chebyshev<A> {
     }
 }
 
-impl<A: FloatNum + std::ops::MulAssign> TransformPar for Chebyshev<A> {
+impl<A: FloatNum> TransformPar for Chebyshev<A> {
     type Physical = A;
     type Spectral = A;
 
@@ -329,7 +343,7 @@ impl<A: FloatNum + std::ops::MulAssign> TransformPar for Chebyshev<A> {
     ) -> Array<Self::Spectral, D>
     where
         S: ndarray::Data<Elem = Self::Physical>,
-        D: Dimension + ndarray::RemoveAxis,
+        D: Dimension,
     {
         use crate::utils::array_resized_axis;
         let mut output = array_resized_axis(input, self.m, axis);
@@ -347,7 +361,7 @@ impl<A: FloatNum + std::ops::MulAssign> TransformPar for Chebyshev<A> {
     ) where
         S1: ndarray::Data<Elem = Self::Physical>,
         S2: ndarray::Data<Elem = Self::Spectral> + ndarray::DataMut,
-        D: Dimension + ndarray::RemoveAxis,
+        D: Dimension,
     {
         use crate::utils::check_array_axis;
         use ndrustfft::nddct1_par;
@@ -383,10 +397,10 @@ impl<A: FloatNum + std::ops::MulAssign> TransformPar for Chebyshev<A> {
     ) -> Array<Self::Physical, D>
     where
         S: ndarray::Data<Elem = Self::Spectral>,
-        D: Dimension + ndarray::RemoveAxis,
+        D: Dimension,
     {
         use crate::utils::array_resized_axis;
-        let mut output = array_resized_axis(input, self.m, axis);
+        let mut output = array_resized_axis(input, self.n, axis);
         self.backward_inplace_par(input, &mut output, axis);
         output
     }
@@ -404,7 +418,7 @@ impl<A: FloatNum + std::ops::MulAssign> TransformPar for Chebyshev<A> {
     ) where
         S1: ndarray::Data<Elem = Self::Spectral>,
         S2: ndarray::Data<Elem = Self::Physical> + ndarray::DataMut,
-        D: Dimension + ndarray::RemoveAxis,
+        D: Dimension,
     {
         use crate::utils::check_array_axis;
         use ndrustfft::nddct1_par;
@@ -423,98 +437,215 @@ impl<A: FloatNum + std::ops::MulAssign> TransformPar for Chebyshev<A> {
     }
 }
 
-impl<A: FloatNum> Differentiate<A> for Chebyshev<A> {
-    fn differentiate<S, D>(
-        &self,
-        data: &ArrayBase<S, D>,
-        n_times: usize,
-        axis: usize,
-    ) -> Array<A, D>
-    where
-        S: ndarray::Data<Elem = A>,
-        D: Dimension,
-    {
-        // Copy input
-        let mut output = data.to_owned();
-        self.differentiate_inplace(&mut output, n_times, axis);
-        output
-    }
+macro_rules! impl_differentiate_chebyshev {
+    ($a: ty) => {
+        impl<A: FloatNum> Differentiate<$a> for Chebyshev<A> {
+            fn differentiate<S, D>(
+                &self,
+                data: &ArrayBase<S, D>,
+                n_times: usize,
+                axis: usize,
+            ) -> Array<$a, D>
+            where
+                S: ndarray::Data<Elem = $a>,
+                D: Dimension,
+            {
+                let mut output = data.to_owned();
+                self.differentiate_inplace(&mut output, n_times, axis);
+                output
+            }
 
-    fn differentiate_inplace<S, D>(&self, data: &mut ArrayBase<S, D>, n_times: usize, axis: usize)
-    where
-        S: ndarray::Data<Elem = A> + ndarray::DataMut,
-        D: Dimension,
-    {
-        use crate::utils::check_array_axis;
-        check_array_axis(data, self.m, axis, Some("chebyshev differentiate"));
-        ndarray::Zip::from(data.lanes_mut(Axis(axis))).for_each(|mut lane| {
-            self.differentiate_lane(&mut lane, n_times);
-        });
-    }
+            fn differentiate_inplace<S, D>(
+                &self,
+                data: &mut ArrayBase<S, D>,
+                n_times: usize,
+                axis: usize,
+            ) where
+                S: ndarray::Data<Elem = $a> + ndarray::DataMut,
+                D: Dimension,
+            {
+                use crate::utils::check_array_axis;
+                check_array_axis(data, self.m, axis, Some("chebyshev differentiate"));
+                ndarray::Zip::from(data.lanes_mut(Axis(axis))).for_each(|mut lane| {
+                    self.differentiate_lane(&mut lane, n_times);
+                });
+            }
+        }
+
+        impl<A: FloatNum> DifferentiatePar<$a> for Chebyshev<A> {
+            fn differentiate_par<S, D>(
+                &self,
+                data: &ArrayBase<S, D>,
+                n_times: usize,
+                axis: usize,
+            ) -> Array<$a, D>
+            where
+                S: ndarray::Data<Elem = $a>,
+                D: Dimension,
+            {
+                let mut output = data.to_owned();
+                self.differentiate_inplace_par(&mut output, n_times, axis);
+                output
+            }
+
+            fn differentiate_inplace_par<S, D>(
+                &self,
+                data: &mut ArrayBase<S, D>,
+                n_times: usize,
+                axis: usize,
+            ) where
+                S: ndarray::Data<Elem = $a> + ndarray::DataMut,
+                D: Dimension,
+            {
+                use crate::utils::check_array_axis;
+                check_array_axis(data, self.m, axis, Some("chebyshev differentiate"));
+                ndarray::Zip::from(data.lanes_mut(Axis(axis))).par_for_each(|mut lane| {
+                    self.differentiate_lane(&mut lane, n_times);
+                });
+            }
+        }
+    };
 }
 
+impl_differentiate_chebyshev!(A);
+impl_differentiate_chebyshev!(Complex<A>);
+
 impl<A: FloatNum> LaplacianInverse<A> for Chebyshev<A> {
+    /// Laplacian
+    fn laplace(&self) -> Array2<A> {
+        Self::_dmat(self.n, 2)
+    }
+
     /// Pseudoinverse Laplacian of chebyshev spectral
     /// differentiation matrices
     ///
     /// Second order equations become banded
     /// when preconditioned with this matrix
+    ///
+    /// # Example
+    /// ```
+    /// use funspace::chebyshev::Chebyshev;
+    /// use funspace::LaplacianInverse;
+    /// use funspace::utils::approx_eq;
+    /// use ndarray::s;
+    /// let ch = Chebyshev::<f64>::new(5);
+    /// let lap = ch.laplace();
+    /// let pinv = ch.laplace_inv();
+    /// let peye = pinv.dot(&lap);
+    /// approx_eq(&peye.slice(s![2..,..]).to_owned(), &ch.laplace_inv_eye());
+    /// ```
     fn laplace_inv(&self) -> Array2<A> {
         Self::_pinv(self.n, 2)
     }
+
     /// Pseudoidentity matrix of laplacian
     fn laplace_inv_eye(&self) -> Array2<A> {
         Self::_pinv_eye(self.n, 2)
     }
 }
 
-impl<A: FloatNum> FromOrtho<A> for Chebyshev<A> {
-    /// Return itself
-    fn to_ortho<S, D>(&self, input: &ArrayBase<S, D>, _axis: usize) -> Array<A, D>
-    where
-        S: ndarray::Data<Elem = A>,
-        D: Dimension,
-    {
-        input.to_owned()
-    }
+macro_rules! impl_from_ortho_chebyshev {
+    ($a: ty) => {
+        impl<A: FloatNum> FromOrtho<$a> for Chebyshev<A> {
+            /// Return itself
+            fn to_ortho<S, D>(&self, input: &ArrayBase<S, D>, _axis: usize) -> Array<$a, D>
+            where
+                S: ndarray::Data<Elem = $a>,
+                D: Dimension,
+            {
+                input.to_owned()
+            }
 
-    /// Return itself
-    fn to_ortho_inplace<S1, S2, D>(
-        &self,
-        input: &ArrayBase<S1, D>,
-        output: &mut ArrayBase<S2, D>,
-        _axis: usize,
-    ) where
-        S1: ndarray::Data<Elem = A>,
-        S2: ndarray::Data<Elem = A> + ndarray::DataMut,
-        D: Dimension,
-    {
-        output.assign(input);
-    }
+            /// Return itself
+            fn to_ortho_inplace<S1, S2, D>(
+                &self,
+                input: &ArrayBase<S1, D>,
+                output: &mut ArrayBase<S2, D>,
+                _axis: usize,
+            ) where
+                S1: ndarray::Data<Elem = $a>,
+                S2: ndarray::Data<Elem = $a> + ndarray::DataMut,
+                D: Dimension,
+            {
+                output.assign(input);
+            }
 
-    /// Return itself
-    fn from_ortho<S, D>(&self, input: &ArrayBase<S, D>, _axis: usize) -> Array<A, D>
-    where
-        S: ndarray::Data<Elem = A>,
-        D: Dimension,
-    {
-        input.to_owned()
-    }
+            /// Return itself
+            fn from_ortho<S, D>(&self, input: &ArrayBase<S, D>, _axis: usize) -> Array<$a, D>
+            where
+                S: ndarray::Data<Elem = $a>,
+                D: Dimension,
+            {
+                input.to_owned()
+            }
 
-    /// Return itself
-    fn from_ortho_inplace<S1, S2, D>(
-        &self,
-        input: &ArrayBase<S1, D>,
-        output: &mut ArrayBase<S2, D>,
-        _axis: usize,
-    ) where
-        S1: ndarray::Data<Elem = A>,
-        S2: ndarray::Data<Elem = A> + ndarray::DataMut,
-        D: Dimension,
-    {
-        output.assign(input);
-    }
+            /// Return itself
+            fn from_ortho_inplace<S1, S2, D>(
+                &self,
+                input: &ArrayBase<S1, D>,
+                output: &mut ArrayBase<S2, D>,
+                _axis: usize,
+            ) where
+                S1: ndarray::Data<Elem = $a>,
+                S2: ndarray::Data<Elem = $a> + ndarray::DataMut,
+                D: Dimension,
+            {
+                output.assign(input);
+            }
+        }
+
+        impl<A: FloatNum> FromOrthoPar<$a> for Chebyshev<A> {
+            /// Return itself
+            fn to_ortho_par<S, D>(&self, input: &ArrayBase<S, D>, _axis: usize) -> Array<$a, D>
+            where
+                S: ndarray::Data<Elem = $a>,
+                D: Dimension,
+            {
+                input.to_owned()
+            }
+
+            /// Return itself
+            fn to_ortho_inplace_par<S1, S2, D>(
+                &self,
+                input: &ArrayBase<S1, D>,
+                output: &mut ArrayBase<S2, D>,
+                _axis: usize,
+            ) where
+                S1: ndarray::Data<Elem = $a>,
+                S2: ndarray::Data<Elem = $a> + ndarray::DataMut,
+                D: Dimension,
+            {
+                output.assign(input);
+            }
+
+            /// Return itself
+            fn from_ortho_par<S, D>(&self, input: &ArrayBase<S, D>, _axis: usize) -> Array<$a, D>
+            where
+                S: ndarray::Data<Elem = $a>,
+                D: Dimension,
+            {
+                input.to_owned()
+            }
+
+            /// Return itself
+            fn from_ortho_inplace_par<S1, S2, D>(
+                &self,
+                input: &ArrayBase<S1, D>,
+                output: &mut ArrayBase<S2, D>,
+                _axis: usize,
+            ) where
+                S1: ndarray::Data<Elem = $a>,
+                S2: ndarray::Data<Elem = $a> + ndarray::DataMut,
+                D: Dimension,
+            {
+                output.assign(input);
+            }
+        }
+    };
 }
+
+impl_from_ortho_chebyshev!(A);
+impl_from_ortho_chebyshev!(Complex<A>);
 
 #[cfg(test)]
 mod test {
@@ -529,7 +660,7 @@ mod test {
         let mut data = Array::<f64, Dim<[Ix; 2]>>::zeros((nx, ny));
 
         // Axis 0
-        let cheby = Chebyshev::new(nx);
+        let cheby = Chebyshev::<f64>::new(nx);
         for (i, v) in data.iter_mut().enumerate() {
             *v = i as f64;
         }
@@ -545,7 +676,7 @@ mod test {
         approx_eq(&diff, &expected);
 
         // Axis 1
-        let cheby = Chebyshev::new(ny);
+        let cheby = Chebyshev::<f64>::new(ny);
         for (i, v) in data.iter_mut().enumerate() {
             *v = i as f64;
         }

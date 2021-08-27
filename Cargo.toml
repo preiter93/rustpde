@@ -12,9 +12,10 @@ ndarray-linalg = { version = "0.14", features = ["openblas-static"] }
 enum_dispatch = "0.3.7"
 num-traits = "0.2.12"
 num-complex = "0.4"
-hdf5-interface = { git = "https://github.com/preiter93/hdf5-interface", branch = "master" }
+hdf5-interface = { path = "hdf5-interface" }
 # funspace = "0.2"
-funspace = { git = "https://github.com/preiter93/funspace", branch = "main" }
+# funspace = { git = "https://github.com/preiter93/funspace", branch = "main" }
+funspace = { path = "funspace" }
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }
