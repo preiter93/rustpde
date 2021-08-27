@@ -257,7 +257,6 @@ dependencies = [
 [[package]]
 name = "funspace"
 version = "0.2.1"
-source = "git+https://github.com/preiter93/funspace?branch=main#307726a34af9c0f7826f6f785169380f9c7e1d73"
 dependencies = [
  "enum_dispatch",
  "ndarray",
@@ -286,7 +285,6 @@ checksum = "62aca2aba2d62b4a7f5b33f3712cb1b0692779a56fb510499d5c0aa594daeaf3"
 [[package]]
 name = "hdf5"
 version = "0.7.1"
-source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5ae444b9e7a189137f511521864987de33"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -302,7 +300,6 @@ dependencies = [
 [[package]]
 name = "hdf5-derive"
 version = "0.7.1"
-source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5ae444b9e7a189137f511521864987de33"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -312,7 +309,6 @@ dependencies = [
 [[package]]
 name = "hdf5-interface"
 version = "0.1.0"
-source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5ae444b9e7a189137f511521864987de33"
 dependencies = [
  "hdf5",
  "ndarray",
@@ -323,7 +319,6 @@ dependencies = [
 [[package]]
 name = "hdf5-sys"
 version = "0.7.1"
-source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5ae444b9e7a189137f511521864987de33"
 dependencies = [
  "libc",
  "libloading",
@@ -337,7 +332,6 @@ dependencies = [
 [[package]]
 name = "hdf5-types"
 version = "0.7.1"
-source = "git+https://github.com/preiter93/hdf5-interface?branch=master#a57f2a5ae444b9e7a189137f511521864987de33"
 dependencies = [
  "ascii",
  "cfg-if",

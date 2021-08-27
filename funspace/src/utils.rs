@@ -1,6 +1,7 @@
 //! Collection of general functions
 use super::FloatNum;
 use ndarray::prelude::*;
+use num_complex::Complex;
 
 /// Returns a new array with same dimensionality
 /// but different size *n* along the specified *axis*.
@@ -8,13 +9,18 @@ use ndarray::prelude::*;
 /// # Example
 /// ```
 /// use funspace::utils::array_resized_axis;
-/// let array = ndarray::Array2::zeros((5, 3));
+/// let array = ndarray::Array2::<f64>::zeros((5, 3));
 /// let resized: ndarray::Array2<f64> = array_resized_axis(&array, 2, 1);
 /// assert!(resized == ndarray::Array2::zeros((5, 2)));
 /// ```
-pub fn array_resized_axis<A, S, D>(input: &ArrayBase<S, D>, size: usize, axis: usize) -> Array<A, D>
+pub fn array_resized_axis<A, S, D, T>(
+    input: &ArrayBase<S, D>,
+    size: usize,
+    axis: usize,
+) -> Array<T, D>
 where
     A: ndarray::LinalgScalar,
+    T: ndarray::LinalgScalar,
     S: ndarray::Data<Elem = A>,
     D: Dimension,
 {
@@ -25,7 +31,7 @@ where
     dim[axis] = size;
 
     // Return
-    Array::<A, D>::zeros(dim)
+    Array::<T, D>::zeros(dim)
 }
 
 /// Checks size of axis.
@@ -82,7 +88,25 @@ where
     let dif = A::from_f64(1e-3).unwrap();
     for (a, b) in expected.iter().zip(result.iter()) {
         if (*a - *b).abs() > dif {
-            panic!("Large difference of values, got {} expected {}.", b, a)
+            panic!("Large difference of values, got {} expected {}.", b, a);
+        }
+    }
+}
+
+/// Test approx equality of two arrays element-wise
+///
+/// # Panics
+/// Panics when difference is larger than 1e-3.
+pub fn approx_eq_complex<A, S, D>(result: &ArrayBase<S, D>, expected: &ArrayBase<S, D>)
+where
+    A: FloatNum + std::fmt::Display,
+    S: ndarray::Data<Elem = Complex<A>>,
+    D: Dimension,
+{
+    let dif = A::from_f64(1e-3).unwrap();
+    for (a, b) in expected.iter().zip(result.iter()) {
+        if (a.re - b.re).abs() > dif || (a.im - b.im).abs() > dif {
+            panic!("Large difference of values, got {} expected {}.", b, a);
         }
     }
 }

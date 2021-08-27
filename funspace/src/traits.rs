@@ -1,25 +1,47 @@
 //! Collection of usefull traits for function spaces
+use crate::enums::{BaseAll, BaseC2c, BaseR2c, BaseR2r};
+use crate::Chebyshev;
+use crate::CompositeChebyshev;
+use crate::FloatNum;
+use crate::FourierC2c;
+use crate::FourierR2c;
 use ndarray::prelude::*;
 
-/// Defines size of basis
+// pub trait SuperBase<F, R, S>:
+//     BaseBasics<F>
+//     + Transform<R, S>
+//     + TransformPar<R, S>
+//     + FromOrtho<S>
+//     + FromOrthoPar<S>
+//     + Differentiate<S>
+//     + LaplacianInverse<F>
+// {
+// }
+
+// impl<T, F, R, S> SuperBase<F, R, S> for T where
+//     T: BaseBasics<F>
+//         + Transform<R, S>
+//         + TransformPar<R, S>
+//         + FromOrtho<S>
+//         + FromOrthoPar<S>
+//         + Differentiate<S>
+//         + LaplacianInverse<F>
+// {
+// }
+
+/// Some basic  traits
 #[enum_dispatch]
-pub trait Size {
+pub trait Basics<T> {
+    /// Coordinates in physical space
+    fn coords(&self) -> &Array1<T>;
     /// Size in physical space
     fn len_phys(&self) -> usize;
     /// Size in spectral space
     fn len_spec(&self) -> usize;
-}
-
-/// Mass matrix expresses the connection (dot product)
-/// of each basis of a funcion space.
-///
-/// Equals the identity matrix for orthonormal bases.
-#[enum_dispatch]
-pub trait Mass<T> {
     /// Return mass matrix
     fn mass(&self) -> Array2<T>;
-    /// Coordinates in physical space
-    fn coords(&self) -> &Array1<T>;
+    /// Return kind of transform
+    fn get_transform_kind(&self) -> &TransformKind;
 }
 
 /// Transform from physical to spectral space and vice versa.
@@ -29,9 +51,9 @@ pub trait Mass<T> {
 /// For example, a fourier transforms from real-to-complex,
 /// while chebyshev from real-to-real.
 pub trait Transform {
-    /// Scalar type in physical space (before transform)
+    // /// Scalar type in physical space (before transform)
     type Physical;
-    /// Scalar type in spectral space (after transfrom)
+    // /// Scalar type in spectral space (after transfrom)
     type Spectral;
     /// Transform physical -> spectral space along axis
     ///
@@ -62,7 +84,7 @@ pub trait Transform {
     ) -> Array<Self::Spectral, D>
     where
         S: ndarray::Data<Elem = Self::Physical>,
-        D: Dimension + ndarray::RemoveAxis;
+        D: Dimension;
 
     /// Transform from spectral to physical space
     ///
@@ -76,7 +98,7 @@ pub trait Transform {
     ) where
         S1: ndarray::Data<Elem = Self::Physical>,
         S2: ndarray::Data<Elem = Self::Spectral> + ndarray::DataMut,
-        D: Dimension + ndarray::RemoveAxis;
+        D: Dimension;
 
     /// Transform spectral -> physical space along *axis*
     ///
@@ -104,7 +126,7 @@ pub trait Transform {
     ) -> Array<Self::Physical, D>
     where
         S: ndarray::Data<Elem = Self::Spectral>,
-        D: Dimension + ndarray::RemoveAxis;
+        D: Dimension;
 
     /// Transform from spectral to physical space
     ///
@@ -118,7 +140,7 @@ pub trait Transform {
     ) where
         S1: ndarray::Data<Elem = Self::Spectral>,
         S2: ndarray::Data<Elem = Self::Physical> + ndarray::DataMut,
-        D: Dimension + ndarray::RemoveAxis;
+        D: Dimension;
 }
 
 /// Transform from physical to spectral space and vice versa.
@@ -162,7 +184,7 @@ pub trait TransformPar {
     ) -> Array<Self::Spectral, D>
     where
         S: ndarray::Data<Elem = Self::Physical>,
-        D: Dimension + ndarray::RemoveAxis;
+        D: Dimension;
 
     /// Transform from spectral to physical space
     ///
@@ -176,7 +198,7 @@ pub trait TransformPar {
     ) where
         S1: ndarray::Data<Elem = Self::Physical>,
         S2: ndarray::Data<Elem = Self::Spectral> + ndarray::DataMut,
-        D: Dimension + ndarray::RemoveAxis;
+        D: Dimension;
 
     /// Transform spectral -> physical space along *axis*
     ///
@@ -204,7 +226,7 @@ pub trait TransformPar {
     ) -> Array<Self::Physical, D>
     where
         S: ndarray::Data<Elem = Self::Spectral>,
-        D: Dimension + ndarray::RemoveAxis;
+        D: Dimension;
 
     /// Transform from spectral to physical space
     ///
@@ -218,11 +240,10 @@ pub trait TransformPar {
     ) where
         S1: ndarray::Data<Elem = Self::Spectral>,
         S2: ndarray::Data<Elem = Self::Physical> + ndarray::DataMut,
-        D: Dimension + ndarray::RemoveAxis;
+        D: Dimension;
 }
 
 /// Perform differentiation in spectral space
-#[enum_dispatch]
 pub trait Differentiate<T> {
     /// Return differentiated array
     fn differentiate<S, D>(
@@ -242,12 +263,39 @@ pub trait Differentiate<T> {
         D: Dimension;
 }
 
+/// Perform differentiation in spectral space (Parallel)
+pub trait DifferentiatePar<T> {
+    /// Return differentiated array
+    fn differentiate_par<S, D>(
+        &self,
+        data: &ArrayBase<S, D>,
+        n_times: usize,
+        axis: usize,
+    ) -> Array<T, D>
+    where
+        S: ndarray::Data<Elem = T>,
+        D: Dimension;
+
+    /// Differentiate on input array
+    fn differentiate_inplace_par<S, D>(
+        &self,
+        data: &mut ArrayBase<S, D>,
+        n_times: usize,
+        axis: usize,
+    ) where
+        S: ndarray::Data<Elem = T> + ndarray::DataMut,
+        D: Dimension;
+}
+
 /// Define (Pseudo-) Inverse of Laplacian
 ///
 /// These operators are usefull when solving
 /// second order equations
 #[enum_dispatch]
 pub trait LaplacianInverse<T> {
+    /// Laplacian $ L $
+    fn laplace(&self) -> Array2<T>;
+
     /// Pseudoinverse mtrix of Laplacian $ L^{-1} $
     fn laplace_inv(&self) -> Array2<T>;
 
@@ -338,4 +386,69 @@ pub trait FromOrtho<T> {
         S1: ndarray::Data<Elem = T>,
         S2: ndarray::Data<Elem = T> + ndarray::DataMut,
         D: Dimension;
+}
+
+/// Define transformation from and to orthonormal space.
+/// (Parallel version which uses ndarrays `par_for_each` iterator)
+#[enum_dispatch]
+pub trait FromOrthoPar<T> {
+    /// Parallel version of `to_ortho`
+    fn to_ortho_par<S, D>(&self, input: &ArrayBase<S, D>, axis: usize) -> Array<T, D>
+    where
+        S: ndarray::Data<Elem = T>,
+        D: Dimension;
+
+    /// Parallel version of `to_ortho_inplace`
+    fn to_ortho_inplace_par<S1, S2, D>(
+        &self,
+        input: &ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
+        axis: usize,
+    ) where
+        S1: ndarray::Data<Elem = T>,
+        S2: ndarray::Data<Elem = T> + ndarray::DataMut,
+        D: Dimension;
+
+    /// Parallel version of `from_ortho`
+    fn from_ortho_par<S, D>(&self, input: &ArrayBase<S, D>, axis: usize) -> Array<T, D>
+    where
+        S: ndarray::Data<Elem = T>,
+        D: Dimension;
+
+    /// Parallel version of `from_ortho_inplace`
+    fn from_ortho_inplace_par<S1, S2, D>(
+        &self,
+        input: &ArrayBase<S1, D>,
+        output: &mut ArrayBase<S2, D>,
+        axis: usize,
+    ) where
+        S1: ndarray::Data<Elem = T>,
+        S2: ndarray::Data<Elem = T> + ndarray::DataMut,
+        D: Dimension;
+}
+
+/// Define which number format the
+/// arrays have before and after
+/// a transform (Type in phyical space
+/// and type in spectral space)
+#[derive(Clone)]
+pub enum TransformKind {
+    /// Real to real transform
+    RealToReal,
+    /// Complex to complex transform
+    ComplexToComplex,
+    /// Real to complex transform
+    RealToComplex,
+}
+
+impl TransformKind {
+    /// Return name of enum as str
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match *self {
+            Self::RealToReal => "RealToReal",
+            Self::ComplexToComplex => "ComplexToComplex",
+            Self::RealToComplex => "RealToComplex",
+        }
+    }
 }
