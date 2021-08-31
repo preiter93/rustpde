@@ -117,7 +117,7 @@ pub fn solid_porosity(
         .round();
     // Distance between elements
     let distance_x = (length - num_circles_in_x * diameter) / (num_circles_in_x + 1.);
-    let distance_y = (height - num_circles_in_y * diameter) / (num_circles_in_x + 1.);
+    let distance_y = (height - num_circles_in_y * diameter) / (num_circles_in_y + 1.);
     // Construct mask
     let mut origin_x = x[0] + distance_x + radius;
     for _i in 0..num_circles_in_x as usize {

@@ -953,6 +953,7 @@ macro_rules! impl_read_write_navier {
             }
 
             fn write_return_result(&mut self, filename: &str) -> Result<()> {
+                use crate::hdf5::write_to_hdf5;
                 self.temp.backward();
                 self.ux.backward();
                 self.uy.backward();
@@ -966,6 +967,10 @@ macro_rules! impl_read_write_navier {
                 self.ux.write(&filename, Some("ux"));
                 self.uy.write(&filename, Some("uy"));
                 self.pres[0].write(&filename, Some("pres"));
+                // Write solid mask
+                if let Some(x) = &self.solid {
+                    write_to_hdf5(&filename, "mask", Some("solid"), &x[0])?;
+                }
                 // Write scalars
                 write_scalar_to_hdf5(&filename, "time", None, self.time)?;
                 write_scalar_to_hdf5(&filename, "ra", None, self.ra)?;
