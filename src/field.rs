@@ -101,12 +101,12 @@ where
 
     /// Forward transformation
     pub fn forward(&mut self) {
-        self.space.forward_inplace_par(&mut self.v, &mut self.vhat);
+        self.space.forward_inplace_par(&self.v, &mut self.vhat);
     }
 
     /// Backward transformation
     pub fn backward(&mut self) {
-        self.space.backward_inplace_par(&mut self.vhat, &mut self.v);
+        self.space.backward_inplace_par(&self.vhat, &mut self.v);
     }
 
     /// Transform from composite to orthogonal space
