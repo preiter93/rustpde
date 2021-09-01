@@ -320,7 +320,7 @@ impl Navier2D<f64, Space2R2r>
         bc.slice_mut(s![.., 1]).fill(-0.5);
 
         // Transform
-        x_base.forward_inplace(&mut bc, &mut fieldbc.vhat, 0);
+        x_base.forward_inplace(&bc, &mut fieldbc.vhat, 0);
         fieldbc.backward();
         fieldbc.forward();
         fieldbc
@@ -349,7 +349,7 @@ impl Navier2D<f64, Space2R2r>
         bc.slice_mut(s![1, ..]).assign(&transfer);
 
         // Transform
-        y_base.forward_inplace(&mut bc, &mut fieldbc.vhat, 1);
+        y_base.forward_inplace(&bc, &mut fieldbc.vhat, 1);
         fieldbc.backward();
         fieldbc.forward();
         fieldbc
@@ -479,7 +479,7 @@ impl Navier2D<Complex<f64>, Space2R2c>
         bc.slice_mut(s![.., 1]).fill(-0.5);
 
         // Transform
-        x_base.forward_inplace(&mut bc, &mut fieldbc.vhat, 0);
+        x_base.forward_inplace(&bc, &mut fieldbc.vhat, 0);
         fieldbc.backward();
         fieldbc.forward();
         fieldbc
