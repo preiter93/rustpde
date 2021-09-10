@@ -1,24 +1,54 @@
 use rustpde::examples::Navier2D;
+// use rustpde::examples::Navier2DAdjoint;
 use rustpde::integrate;
 use rustpde::Integrate;
 
 fn main() {
     // Parameters
-    let (nx, ny) = (64, 64);
-    let ra = 1e5;
+    let (nx, ny) = (97, 97);
+    let ra = 9e5;
     let pr = 1.;
     let adiabatic = true;
     let aspect = 1.0;
     let dt = 0.02;
     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, aspect, adiabatic);
     // Set initial conditions
-    navier.set_velocity(0.2, 1., 1.);
+    //navier.set_velocity(0.2, 1., 1.);
+    navier.read("restart.h5");
     // // Want to restart?
     // navier.read("data/flow100.000.h5");
     // Write first field
     navier.callback();
-    integrate(&mut navier, 100., Some(1.0));
+    integrate(&mut navier, 320., Some(1.0));
 }
+
+// fn adjoint() {
+//     // Parameters
+//     let (nx, ny) = (97, 97);
+//     let ra = 4e6;
+//     let pr = 1.;
+//     let adiabatic = true;
+//     let aspect = 1.0;
+//     let dt = 0.02;
+//     let hdffile = format!("flow_ra{:4.2e}.h5", ra);
+//     let txtfile = format!("flow_ra{:4.2e}.txt", ra);
+//     let mut navier = Navier2DAdjoint::new(nx, ny, ra, pr, dt, aspect, adiabatic);
+//     // Want to restart?
+//     navier.read("restart.h5");
+//     navier.reset_time();
+//     //navier.read("data/adjoint00290.00.h5");
+//
+//     //Integrate
+//     integrate(&mut navier, 500., Some(1.0));
+//
+//     // Write
+//     navier.write(&hdffile);
+//     let nu = &navier.eval_nu();
+//     let nuvol = navier.eval_nuvol();
+//     let re = navier.eval_re();
+//     let data = format!("{:5.3e}  {:5.3e}  {:5.3e}  {:5.3e} \n", ra, nu, nuvol, re);
+//     std::fs::write(txtfile, data).expect("Unable to write file");
+// }
 
 // fn main() {
 //     // Parameters

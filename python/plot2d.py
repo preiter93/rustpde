@@ -33,4 +33,5 @@ with h5py.File(filename, "r") as f:
 
 print("Plot {:}".format(filename))
 fig, ax = plot_streamplot(x, y, t, u, v, return_fig=True)
+fig.savefig("fig.png", bbox_inches="tight", dpi=200)
 plt.show()
