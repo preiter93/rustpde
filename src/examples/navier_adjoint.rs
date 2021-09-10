@@ -42,7 +42,7 @@ use crate::bases::{cheb_dirichlet, cheb_neumann, chebyshev};
 use crate::bases::{BaseR2c, BaseR2r};
 use crate::field::{BaseSpace, Field2, ReadField, Space2, WriteField};
 use crate::hdf5::{read_scalar_from_hdf5, write_scalar_to_hdf5, Result};
-use crate::solver::{Poisson, Solve, SolverField};
+use crate::solver::{Hholtz, Poisson, Solve, SolverField};
 use crate::Integrate;
 use ndarray::Array2;
 use num_complex::Complex;
@@ -234,37 +234,80 @@ impl Navier2DAdjoint<f64, Space2R2r> {
         ];
         // fields for derivatives
         let field = Field2::new(&Space2::new(&chebyshev(nx), &chebyshev(ny)));
-        // define solver
-        let smooth_ux = SolverField::Poisson(Poisson::new(
-            &ux[0],
-            [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
-        ));
-        let smooth_uy = SolverField::Poisson(Poisson::new(
-            &uy[0],
-            [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
-        ));
-        let smooth_temp = SolverField::Poisson(Poisson::new(
-            &temp[0],
-            [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
-        ));
+
+        // pressure solver
         let solver_pres = SolverField::Poisson(Poisson::new(
             &pres[1],
-            [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
+            [1.0 / scale[0].powf(2.), 1.0 / scale[1].powf(2.)],
         ));
-        let smoother = [smooth_ux, smooth_uy, smooth_temp];
         let solver = [solver_pres];
-        let rhs = Array2::zeros(field.vhat.raw_dim());
+
+        // scale for adjoint (value < 1 can improve convergence)
+        let scale_adjoint = 1e2;
+
+        // define smoother (hholtz type)
+        let smooth_ux = SolverField::Hholtz(Hholtz::new(
+            &ux[0],
+            [
+                1.0 / (scale_adjoint * scale[0].powf(2.)),
+                1.0 / (scale_adjoint * scale[1].powf(2.)),
+            ],
+        ));
+        let smooth_uy = SolverField::Hholtz(Hholtz::new(
+            &uy[0],
+            [
+                1.0 / (scale_adjoint * scale[0].powf(2.)),
+                1.0 / (scale_adjoint * scale[1].powf(2.)),
+            ],
+        ));
+        let smooth_temp = SolverField::Hholtz(Hholtz::new(
+            &temp[0],
+            [
+                1.0 / (scale_adjoint * scale[0].powf(2.)),
+                1.0 / (scale_adjoint * scale[1].powf(2.)),
+            ],
+        ));
+
+        // define smoother (poisson type)
+        // let smooth_ux = SolverField::Poisson(Poisson::new(
+        //     &ux[0],
+        //     [
+        //         1.0 / (scale_adjoint * scale[0].powf(2.)),
+        //         1.0 / (scale_adjoint * scale[1].powf(2.)),
+        //     ],
+        // ));
+        // let smooth_uy = SolverField::Poisson(Poisson::new(
+        //     &uy[0],
+        //     [
+        //         1.0 / (scale_adjoint * scale[0].powf(2.)),
+        //         1.0 / (scale_adjoint * scale[1].powf(2.)),
+        //     ],
+        // ));
+        // let smooth_temp = SolverField::Poisson(Poisson::new(
+        //     &temp[0],
+        //     [
+        //         1.0 / (scale_adjoint * scale[0].powf(2.)),
+        //         1.0 / (scale_adjoint * scale[1].powf(2.)),
+        //     ],
+        // ));
+
+        let smoother = [smooth_ux, smooth_uy, smooth_temp];
         let fields_unsmoothed = [
             Array2::zeros(field.vhat.raw_dim()),
             Array2::zeros(field.vhat.raw_dim()),
             Array2::zeros(field.vhat.raw_dim()),
         ];
+
+        // Buffer for rhs
+        let rhs = Array2::zeros(field.vhat.raw_dim());
+
         // Diagnostics
         let mut diagnostics = HashMap::new();
         diagnostics.insert("time".to_string(), Vec::<f64>::new());
         diagnostics.insert("Nu".to_string(), Vec::<f64>::new());
         diagnostics.insert("Nuvol".to_string(), Vec::<f64>::new());
         diagnostics.insert("Re".to_string(), Vec::<f64>::new());
+
         // Initialize
         let mut navier_adjoint = Navier2DAdjoint::<f64, Space2R2r> {
             navier,
@@ -285,7 +328,7 @@ impl Navier2DAdjoint<f64, Space2R2r> {
             time: 0.0,
             dt,
             scale,
-            scale_adjoint: nu,
+            scale_adjoint,
             diagnostics,
             write_intervall: None,
             res_tol: RES_TOL,
@@ -348,31 +391,49 @@ impl Navier2DAdjoint<Complex<f64>, Space2R2c> {
         ];
         // fields for derivatives
         let field = Field2::new(&Space2::new(&fourier_r2c(nx), &chebyshev(ny)));
-        // define solver
-        let smooth_ux = SolverField::Poisson(Poisson::new(
-            &ux[0],
-            [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
-        ));
-        let smooth_uy = SolverField::Poisson(Poisson::new(
-            &uy[0],
-            [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
-        ));
-        let smooth_temp = SolverField::Poisson(Poisson::new(
-            &temp[0],
-            [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
-        ));
+
+        // pressure solver
         let solver_pres = SolverField::Poisson(Poisson::new(
             &pres[1],
-            [1. / scale[0].powf(2.), 1. / scale[1].powf(2.)],
+            [1.0 / scale[0].powf(2.), 1.0 / scale[1].powf(2.)],
         ));
-        let smoother = [smooth_ux, smooth_uy, smooth_temp];
         let solver = [solver_pres];
-        let rhs = Array2::zeros(field.vhat.raw_dim());
+
+        // scale for adjoint (value < 1 can improve convergence)
+        let scale_adjoint = 1. / nu;
+
+        // define smoother (hholtz type)
+        let smooth_ux = SolverField::Hholtz(Hholtz::new(
+            &ux[0],
+            [
+                1.0 / (scale_adjoint * scale[0].powf(2.)),
+                1.0 / (scale_adjoint * scale[1].powf(2.)),
+            ],
+        ));
+        let smooth_uy = SolverField::Hholtz(Hholtz::new(
+            &uy[0],
+            [
+                1.0 / (scale_adjoint * scale[0].powf(2.)),
+                1.0 / (scale_adjoint * scale[1].powf(2.)),
+            ],
+        ));
+        let smooth_temp = SolverField::Hholtz(Hholtz::new(
+            &temp[0],
+            [
+                1.0 / (scale_adjoint * scale[0].powf(2.)),
+                1.0 / (scale_adjoint * scale[1].powf(2.)),
+            ],
+        ));
+
+        let smoother = [smooth_ux, smooth_uy, smooth_temp];
         let fields_unsmoothed = [
             Array2::zeros(field.vhat.raw_dim()),
             Array2::zeros(field.vhat.raw_dim()),
             Array2::zeros(field.vhat.raw_dim()),
         ];
+        // buffer for rhs
+        let rhs = Array2::zeros(field.vhat.raw_dim());
+
         // Diagnostics
         let mut diagnostics = HashMap::new();
         diagnostics.insert("time".to_string(), Vec::<f64>::new());
@@ -399,7 +460,7 @@ impl Navier2DAdjoint<Complex<f64>, Space2R2c> {
             time: 0.0,
             dt,
             scale,
-            scale_adjoint: nu,
+            scale_adjoint,
             diagnostics,
             write_intervall: None,
             res_tol: RES_TOL,
@@ -562,10 +623,10 @@ macro_rules! impl_navier_convection {
                 let conv = self.conv_ux(ux, uy, temp);
                 self.rhs += &(conv * self.dt);
                 // + diffusion
-                let nu = self.nu / self.scale_adjoint;
-                self.rhs += &(&self.fields_unsmoothed[0] * self.dt * nu);
-                // self.rhs += &(self.ux[1].gradient([2, 0], Some(self.scale)) * self.dt * self.nu);
-                // self.rhs += &(self.ux[1].gradient([0, 2], Some(self.scale)) * self.dt * self.nu);
+                // let nu = self.nu / self.scale_adjoint;
+                // self.rhs += &(&self.fields_unsmoothed[0] * self.dt * nu);
+                self.rhs += &(self.ux[1].gradient([2, 0], Some(self.scale)) * self.dt * self.nu);
+                self.rhs += &(self.ux[1].gradient([0, 2], Some(self.scale)) * self.dt * self.nu);
                 // update ux
                 self.ux[0].from_ortho(&self.rhs);
             }
@@ -586,10 +647,10 @@ macro_rules! impl_navier_convection {
                 let conv = self.conv_uy(ux, uy, temp);
                 self.rhs += &(conv * self.dt);
                 // + diffusion
-                let nu = self.nu / self.scale_adjoint;
-                self.rhs += &(&self.fields_unsmoothed[1] * self.dt * nu);
-                // self.rhs += &(self.uy[1].gradient([2, 0], Some(self.scale)) * self.dt * self.nu);
-                // self.rhs += &(self.uy[1].gradient([0, 2], Some(self.scale)) * self.dt * self.nu);
+                // let nu = self.nu / self.scale_adjoint;
+                // self.rhs += &(&self.fields_unsmoothed[1] * self.dt * nu);
+                self.rhs += &(self.uy[1].gradient([2, 0], Some(self.scale)) * self.dt * self.nu);
+                self.rhs += &(self.uy[1].gradient([0, 2], Some(self.scale)) * self.dt * self.nu);
                 // update uy
                 self.uy[0].from_ortho(&self.rhs);
             }
@@ -606,10 +667,10 @@ macro_rules! impl_navier_convection {
                 let buoy = self.uy[1].to_ortho();
                 self.rhs += &(buoy * self.dt);
                 // + diffusion
-                let ka = self.ka / self.scale_adjoint;
-                self.rhs += &(&self.fields_unsmoothed[2] * self.dt * ka);
-                // self.rhs += &(self.temp[1].gradient([2, 0], Some(self.scale)) * self.dt * self.ka);
-                // self.rhs += &(self.temp[1].gradient([0, 2], Some(self.scale)) * self.dt * self.ka);
+                // let ka = self.ka / self.scale_adjoint;
+                // self.rhs += &(&self.fields_unsmoothed[2] * self.dt * ka);
+                self.rhs += &(self.temp[1].gradient([2, 0], Some(self.scale)) * self.dt * self.ka);
+                self.rhs += &(self.temp[1].gradient([0, 2], Some(self.scale)) * self.dt * self.ka);
                 // update temp
                 self.temp[0].from_ortho(&self.rhs);
             }
@@ -654,7 +715,7 @@ macro_rules! impl_navier_convection {
             }
 
             fn update_pres(&mut self, _div: &Array2<Self::Spectral>) {
-                //self.pres[0].vhat -= &(self.nu * div);
+                // self.pres[0].vhat = &self.pres[0].vhat - &(div * self.nu);
                 let inv_dt: Self::Spectral = (1. / self.dt).into();
                 self.pres[0].vhat += &(&self.pres[1].to_ortho() * inv_dt);
             }
@@ -680,10 +741,14 @@ macro_rules! impl_navier_convection {
                 self.smoother[0].solve(&self.fields_unsmoothed[0], &mut self.ux[1].vhat, 0);
                 self.smoother[1].solve(&self.fields_unsmoothed[1], &mut self.uy[1].vhat, 0);
                 self.smoother[2].solve(&self.fields_unsmoothed[2], &mut self.temp[1].vhat, 0);
-                let scale_into: Self::Spectral = self.scale_adjoint.into();
-                self.ux[1].vhat /= scale_into;
-                self.uy[1].vhat /= scale_into;
-                self.temp[1].vhat /= scale_into;
+                let one: Self::Spectral = (-1.0).into();
+                self.ux[1].vhat *= one;
+                self.uy[1].vhat *= one;
+                self.temp[1].vhat *= one;
+                // let scale_into: Self::Spectral = self.scale_adjoint.into();
+                // self.ux[1].vhat /= scale_into;
+                // self.uy[1].vhat /= scale_into;
+                // self.temp[1].vhat /= scale_into;
             }
         }
     };
@@ -767,10 +832,6 @@ macro_rules! impl_integrate {
                     nuvol,
                     re,
                 );
-                //println!("Residuals:");
-                println!("|U| = {:10.2e}", $norm(&self.fields_unsmoothed[0]),);
-                println!("|V| = {:10.2e}", $norm(&self.fields_unsmoothed[1]),);
-                println!("|T| = {:10.2e}", $norm(&self.fields_unsmoothed[2]),);
 
                 // diagnostics
                 if let Some(d) = self.diagnostics.get_mut("time") {
@@ -791,8 +852,28 @@ macro_rules! impl_integrate {
                     .create(true)
                     .open("data/adjoint_info.txt")
                     .unwrap();
-                //write!(file, "{} {}", time, nu);
                 if let Err(e) = writeln!(file, "{} {} {} {}", self.time, nu, nuvol, re) {
+                    eprintln!("Couldn't write to file: {}", e);
+                }
+                // Write residual
+                let res_u = $norm(&self.fields_unsmoothed[0]);
+                let res_v = $norm(&self.fields_unsmoothed[1]);
+                let res_t = $norm(&self.fields_unsmoothed[2]);
+                let res_total = res_u + res_v + res_t;
+                let res_u2 = $norm(&self.ux[1].vhat);
+                let res_v2 = $norm(&self.uy[1].vhat);
+                let res_t2 = $norm(&self.temp[1].vhat);
+                let res_total2 = res_u2 + res_v2 + res_t2;
+                println!("|U| = {:10.2e}", res_u2,);
+                println!("|V| = {:10.2e}", res_v2,);
+                println!("|T| = {:10.2e}", res_t2,);
+                let mut residual = std::fs::OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .create(true)
+                    .open("data/residual.txt")
+                    .unwrap();
+                if let Err(e) = writeln!(residual, "{} {} {}", self.time, res_total, res_total2) {
                     eprintln!("Couldn't write to file: {}", e);
                 }
             }
@@ -804,10 +885,10 @@ macro_rules! impl_integrate {
                     return true;
                 }
                 // Break if residual is small enough
-                let mut res = $norm(&self.fields_unsmoothed[0]) / 3.;
-                res += $norm(&self.fields_unsmoothed[1]) / 3.;
-                res += $norm(&self.fields_unsmoothed[2]) / 3.;
-                if res < self.res_tol {
+                let res_u = $norm(&self.ux[1].vhat);
+                let res_v = $norm(&self.uy[1].vhat);
+                let res_t = $norm(&self.temp[1].vhat);
+                if res_u + res_v + res_t < self.res_tol {
                     return true;
                 }
                 false
@@ -830,6 +911,21 @@ fn norm_l2_c64(array: &Array2<Complex<f64>>) -> f64 {
         .sum::<f64>()
         .sqrt()
 }
+
+// fn norm_l2_f64(q1: &Array2<f64>, q2: &Array2<f64>) -> f64 {
+//     q1.iter().zip(q2).map(|(x, y)| x * y).sum::<f64>().sqrt()
+// }
+//
+// fn norm_l2_c64(q1: &Array2<Complex<f64>>, q2: &Array2<Complex<f64>>) -> f64 {
+//     q1.iter()
+//         .zip(q2)
+//         .map(|(x, y)| {
+//             let z = x * y;
+//             z.re.powi(2) + z.im.powi(2)
+//         })
+//         .sum::<f64>()
+//         .sqrt()
+// }
 
 impl<T, S> Navier2DAdjoint<T, S>
 where

@@ -48,7 +48,7 @@ def plot_streamplot(x, y, t, u, v, return_fig=False):
 
     fig, ax = plt.subplots()
     ax.contourf(
-        xx, yy, t, levels=np.linspace(t.min(), t.max(), 101), cmap=SETTINGS["cmap"]
+        xx, yy, t, levels=np.linspace(t.min(), t.max(), 401), cmap=SETTINGS["cmap"]
     )
     ax.set_aspect(1)
     ax.set_xticks([])
