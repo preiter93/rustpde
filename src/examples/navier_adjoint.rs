@@ -163,7 +163,7 @@ pub struct Navier2DAdjoint<T, S> {
     /// Scale of physical dimension [scale_x, scale_y]
     pub scale: [f64; 2],
     /// Scale adjoint fields
-    scale_adjoint: f64,
+    scale_residual: f64,
     /// diagnostics like Nu, ...
     pub diagnostics: HashMap<String, Vec<f64>>,
     /// Time intervall for write fields
@@ -242,54 +242,56 @@ impl Navier2DAdjoint<f64, Space2R2r> {
         ));
         let solver = [solver_pres];
 
-        // scale for adjoint (value < 1 can improve convergence)
-        let scale_adjoint = 1e2;
-
-        // define smoother (hholtz type)
+        // define smoother (hholtz type) (1-weight*D2)
+        let weight_laplacian = 1e0;
         let smooth_ux = SolverField::Hholtz(Hholtz::new(
             &ux[0],
             [
-                1.0 / (scale_adjoint * scale[0].powf(2.)),
-                1.0 / (scale_adjoint * scale[1].powf(2.)),
+                weight_laplacian / scale[0].powf(2.),
+                weight_laplacian / scale[1].powf(2.),
             ],
         ));
         let smooth_uy = SolverField::Hholtz(Hholtz::new(
             &uy[0],
             [
-                1.0 / (scale_adjoint * scale[0].powf(2.)),
-                1.0 / (scale_adjoint * scale[1].powf(2.)),
+                weight_laplacian / scale[0].powf(2.),
+                weight_laplacian / scale[1].powf(2.),
             ],
         ));
         let smooth_temp = SolverField::Hholtz(Hholtz::new(
             &temp[0],
             [
-                1.0 / (scale_adjoint * scale[0].powf(2.)),
-                1.0 / (scale_adjoint * scale[1].powf(2.)),
+                weight_laplacian / scale[0].powf(2.),
+                weight_laplacian / scale[1].powf(2.),
             ],
         ));
+        // Rescale residual
+        let scale_residual = 1e2;
 
-        // define smoother (poisson type)
+        // // define smoother (poisson type)
         // let smooth_ux = SolverField::Poisson(Poisson::new(
         //     &ux[0],
         //     [
-        //         1.0 / (scale_adjoint * scale[0].powf(2.)),
-        //         1.0 / (scale_adjoint * scale[1].powf(2.)),
+        //         -1.0 / (1. * scale[0].powf(2.)),
+        //         -1.0 / (1. * scale[1].powf(2.)),
         //     ],
         // ));
         // let smooth_uy = SolverField::Poisson(Poisson::new(
         //     &uy[0],
         //     [
-        //         1.0 / (scale_adjoint * scale[0].powf(2.)),
-        //         1.0 / (scale_adjoint * scale[1].powf(2.)),
+        //         -1.0 / (1. * scale[0].powf(2.)),
+        //         -1.0 / (1. * scale[1].powf(2.)),
         //     ],
         // ));
         // let smooth_temp = SolverField::Poisson(Poisson::new(
         //     &temp[0],
         //     [
-        //         1.0 / (scale_adjoint * scale[0].powf(2.)),
-        //         1.0 / (scale_adjoint * scale[1].powf(2.)),
+        //         -1.0 / (1. * scale[0].powf(2.)),
+        //         -1.0 / (1. * scale[1].powf(2.)),
         //     ],
         // ));
+        // // Rescale residual
+        // let scale_residual = 1e2;
 
         let smoother = [smooth_ux, smooth_uy, smooth_temp];
         let fields_unsmoothed = [
@@ -328,7 +330,7 @@ impl Navier2DAdjoint<f64, Space2R2r> {
             time: 0.0,
             dt,
             scale,
-            scale_adjoint,
+            scale_residual,
             diagnostics,
             write_intervall: None,
             res_tol: RES_TOL,
@@ -399,31 +401,56 @@ impl Navier2DAdjoint<Complex<f64>, Space2R2c> {
         ));
         let solver = [solver_pres];
 
-        // scale for adjoint (value < 1 can improve convergence)
-        let scale_adjoint = 1. / nu;
-
-        // define smoother (hholtz type)
+        // define smoother (hholtz type) (1-weight*D2)
+        let weight_laplacian = 1e0;
         let smooth_ux = SolverField::Hholtz(Hholtz::new(
             &ux[0],
             [
-                1.0 / (scale_adjoint * scale[0].powf(2.)),
-                1.0 / (scale_adjoint * scale[1].powf(2.)),
+                weight_laplacian / scale[0].powf(2.),
+                weight_laplacian / scale[1].powf(2.),
             ],
         ));
         let smooth_uy = SolverField::Hholtz(Hholtz::new(
             &uy[0],
             [
-                1.0 / (scale_adjoint * scale[0].powf(2.)),
-                1.0 / (scale_adjoint * scale[1].powf(2.)),
+                weight_laplacian / scale[0].powf(2.),
+                weight_laplacian / scale[1].powf(2.),
             ],
         ));
         let smooth_temp = SolverField::Hholtz(Hholtz::new(
             &temp[0],
             [
-                1.0 / (scale_adjoint * scale[0].powf(2.)),
-                1.0 / (scale_adjoint * scale[1].powf(2.)),
+                weight_laplacian / scale[0].powf(2.),
+                weight_laplacian / scale[1].powf(2.),
             ],
         ));
+        // Rescale residual
+        let scale_residual = 1e2;
+
+        // // define smoother (poisson type)
+        // let smooth_ux = SolverField::Poisson(Poisson::new(
+        //     &ux[0],
+        //     [
+        //         -1.0 / (1. * scale[0].powf(2.)),
+        //         -1.0 / (1. * scale[1].powf(2.)),
+        //     ],
+        // ));
+        // let smooth_uy = SolverField::Poisson(Poisson::new(
+        //     &uy[0],
+        //     [
+        //         -1.0 / (1. * scale[0].powf(2.)),
+        //         -1.0 / (1. * scale[1].powf(2.)),
+        //     ],
+        // ));
+        // let smooth_temp = SolverField::Poisson(Poisson::new(
+        //     &temp[0],
+        //     [
+        //         -1.0 / (1. * scale[0].powf(2.)),
+        //         -1.0 / (1. * scale[1].powf(2.)),
+        //     ],
+        // ));
+        // // Rescale residual
+        // let scale_residual = 1e2;
 
         let smoother = [smooth_ux, smooth_uy, smooth_temp];
         let fields_unsmoothed = [
@@ -460,7 +487,7 @@ impl Navier2DAdjoint<Complex<f64>, Space2R2c> {
             time: 0.0,
             dt,
             scale,
-            scale_adjoint,
+            scale_residual,
             diagnostics,
             write_intervall: None,
             res_tol: RES_TOL,
@@ -623,7 +650,7 @@ macro_rules! impl_navier_convection {
                 let conv = self.conv_ux(ux, uy, temp);
                 self.rhs += &(conv * self.dt);
                 // + diffusion
-                // let nu = self.nu / self.scale_adjoint;
+                // let nu = self.nu / self.scale_residual;
                 // self.rhs += &(&self.fields_unsmoothed[0] * self.dt * nu);
                 self.rhs += &(self.ux[1].gradient([2, 0], Some(self.scale)) * self.dt * self.nu);
                 self.rhs += &(self.ux[1].gradient([0, 2], Some(self.scale)) * self.dt * self.nu);
@@ -647,7 +674,7 @@ macro_rules! impl_navier_convection {
                 let conv = self.conv_uy(ux, uy, temp);
                 self.rhs += &(conv * self.dt);
                 // + diffusion
-                // let nu = self.nu / self.scale_adjoint;
+                // let nu = self.nu / self.scale_residual;
                 // self.rhs += &(&self.fields_unsmoothed[1] * self.dt * nu);
                 self.rhs += &(self.uy[1].gradient([2, 0], Some(self.scale)) * self.dt * self.nu);
                 self.rhs += &(self.uy[1].gradient([0, 2], Some(self.scale)) * self.dt * self.nu);
@@ -667,7 +694,7 @@ macro_rules! impl_navier_convection {
                 let buoy = self.uy[1].to_ortho();
                 self.rhs += &(buoy * self.dt);
                 // + diffusion
-                // let ka = self.ka / self.scale_adjoint;
+                // let ka = self.ka / self.scale_residual;
                 // self.rhs += &(&self.fields_unsmoothed[2] * self.dt * ka);
                 self.rhs += &(self.temp[1].gradient([2, 0], Some(self.scale)) * self.dt * self.ka);
                 self.rhs += &(self.temp[1].gradient([0, 2], Some(self.scale)) * self.dt * self.ka);
@@ -741,11 +768,11 @@ macro_rules! impl_navier_convection {
                 self.smoother[0].solve(&self.fields_unsmoothed[0], &mut self.ux[1].vhat, 0);
                 self.smoother[1].solve(&self.fields_unsmoothed[1], &mut self.uy[1].vhat, 0);
                 self.smoother[2].solve(&self.fields_unsmoothed[2], &mut self.temp[1].vhat, 0);
-                let one: Self::Spectral = (-1.0).into();
+                let one: Self::Spectral = (-1.0 * self.scale_residual).into();
                 self.ux[1].vhat *= one;
                 self.uy[1].vhat *= one;
                 self.temp[1].vhat *= one;
-                // let scale_into: Self::Spectral = self.scale_adjoint.into();
+                // let scale_into: Self::Spectral = self.scale_residual.into();
                 // self.ux[1].vhat /= scale_into;
                 // self.uy[1].vhat /= scale_into;
                 // self.temp[1].vhat /= scale_into;

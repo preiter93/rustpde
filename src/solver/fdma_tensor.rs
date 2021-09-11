@@ -18,9 +18,9 @@ use std::ops::{Add, Div, Mul};
 /// via a eigendecomposition. This makes the problem,
 /// banded along the not-diagonalized direction.
 ///
-/// In 2-D, the equations have the form:
+/// In 2-D, the equations for each row look like:
 /// .. math::
-/// (A + lam_i*C)x_i = b_i
+/// (A + (lam_i + alpha)*C)x_i = b_i
 ///
 ///  x,b: Matrix ( M x N )
 ///
@@ -37,32 +37,32 @@ use std::ops::{Add, Div, Mul};
 /// Starting from the equation
 /// .. math::
 ///
-///  [(Ax x Cy) + (Cx x Ay)] g = f
+///  [(Ax x Cy) + (Cx x Ay) + alpha (Cx x Cy)] g = f
 ///
 /// where 'x' is the Kronecker product operator.
 ///
 /// Multiplying it by the inverse of Cx, CxI
 /// .. math::
 ///
-/// [(CxI @ Ax x Cy) + (Ix x Ay)] g = (CxI x Iy) f
+/// [(CxI @ Ax x Cy) + (Ix x Ay) + alpha (Ix x Cy)] g = (CxI x Iy) f
 ///
 /// Applying a eigen-decomposition on CxI @ Ax = Qx lam QxI,
 /// and multiplying the above equation with QxI from the left
 /// .. math::
 ///
-/// [(lam*QxI x Cy) + (QxI x Ay)] g = (QxI@CxI x Iy) f
+/// [(lam*QxI x Cy) + (QxI x Ay) + + alpha (QxI x Cy)] g = (QxI@CxI x Iy) f
 ///
 /// This equation is solved in 3 steps:
 ///
-/// 1. Transform f:
+/// 1. Transform f (x):
 /// .. math::
 ///
-///    fhat = (QxI@CxI x Iy) f = self.p.dot( f )
+///    fhat = (QxI @ CxI x Iy) f = self.p.dot( f )
 ///
-///  2. Solve the system, that is now seperatble and banded in y (y)
+///  2. Solve the system, that is now seperable and banded (y)
 /// .. math::
 ///
-///    (Ay + lam_i*Cy)ghat_i = fhat_i
+///    (Ay + (lam_i + alpha)*Cy)ghat_i = fhat_i
 ///
 ///  3. Transfrom ghat back to g (x)
 /// .. math::
@@ -80,6 +80,8 @@ pub struct FdmaTensor<T, const N: usize> {
     /// Eigenvalues, of size (N-1)
     pub lam: Vec<Array1<T>>,
     singular: bool,
+    /// Additional constant for hholtz problems
+    pub alpha: T,
 }
 
 impl<const N: usize> FdmaTensor<f64, N> {
@@ -97,7 +99,12 @@ impl<const N: usize> FdmaTensor<f64, N> {
     ///
     /// In this case, only a, which must be a banded matrix, is used in solve.
     #[allow(clippy::many_single_char_names, clippy::similar_names)]
-    pub fn from_matrix(a: [&Array2<f64>; N], c: [&Array2<f64>; N], a_is_diag: [&bool; N]) -> Self {
+    pub fn from_matrix(
+        a: [&Array2<f64>; N],
+        c: [&Array2<f64>; N],
+        a_is_diag: [&bool; N],
+        alpha: f64,
+    ) -> Self {
         //todo!()
         let mut fwd: Vec<Option<Array2<f64>>> = Vec::new();
         let mut bwd: Vec<Option<Array2<f64>>> = Vec::new();
@@ -130,6 +137,7 @@ impl<const N: usize> FdmaTensor<f64, N> {
             bwd,
             lam,
             singular: false,
+            alpha,
         };
 
         // For 1-D problems, the forward sweep
@@ -209,7 +217,7 @@ where
         Zip::from(output.outer_iter_mut())
             .and(self.lam[0].outer_iter())
             .par_for_each(|mut out, lam| {
-                let l = lam.as_slice().unwrap()[0];
+                let l = lam.as_slice().unwrap()[0] + self.alpha;
                 let mut fdma = &self.fdma[0] + &(&self.fdma[1] * l);
                 fdma.sweep();
                 fdma.solve(&out.to_owned(), &mut out, 0);
@@ -284,7 +292,7 @@ mod tests {
             *v = i as f64;
         }
         let matrix = test_matrix(nx);
-        let solver = FdmaTensor::from_matrix([&matrix], [&matrix], [&false]);
+        let solver = FdmaTensor::from_matrix([&matrix], [&matrix], [&false], 0.);
         solver.solve(&data, &mut result, 0);
         let recover: Array1<f64> = matrix.dot(&result);
         approx_eq(&recover, &data);
@@ -301,7 +309,7 @@ mod tests {
             v.im = (i + 1) as f64;
         }
         let matrix = test_matrix(nx);
-        let solver = FdmaTensor::from_matrix([&matrix], [&matrix], [&false]);
+        let solver = FdmaTensor::from_matrix([&matrix], [&matrix], [&false], 0.);
         solver.solve(&data, &mut result, 0);
         let recover: Array1<Ty> = matrix.mapv(|x| Complex::new(x, 0.)).dot(&result);
         approx_eq_complex(&recover, &data);
@@ -335,7 +343,7 @@ mod tests {
             [0.0, 0.0, 0.0, -0.00595, 0.0, 0.00595]
         ];
 
-        let solver = FdmaTensor::from_matrix([&a, &a], [&c, &c], [&false, &false]);
+        let solver = FdmaTensor::from_matrix([&a, &a], [&c, &c], [&false, &false], 0.);
         solver.solve(&data, &mut result, 0);
 
         // Recover b
@@ -375,7 +383,7 @@ mod tests {
         let ac = a.mapv(|x| Complex::new(x, 0.));
         let cc = c.mapv(|x| Complex::new(x, 0.));
 
-        let solver = FdmaTensor::from_matrix([&a, &a], [&c, &c], [&false, &false]);
+        let solver = FdmaTensor::from_matrix([&a, &a], [&c, &c], [&false, &false], 0.);
         solver.solve(&data, &mut result, 0);
 
         // Recover b

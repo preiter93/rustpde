@@ -5,6 +5,7 @@
 pub mod fdma;
 pub mod fdma_tensor;
 pub mod hholtz;
+pub mod hholtz_adi;
 pub mod matvec;
 pub mod poisson;
 pub mod tdma;
@@ -12,6 +13,7 @@ pub mod utils;
 pub use fdma::Fdma;
 pub use fdma_tensor::FdmaTensor;
 pub use hholtz::Hholtz;
+pub use hholtz_adi::HholtzAdi;
 pub use matvec::{MatVec, MatVecDot, MatVecFdma};
 use ndarray::{Array, ArrayBase, Data, DataMut};
 use num_complex::Complex;
@@ -86,6 +88,8 @@ pub enum Solver<T> {
 pub enum SolverField<T, const N: usize> {
     /// Helmholtz Type Solver
     Hholtz(Hholtz<T, N>),
+    /// Helmholtz Type Solver (Alternatic direction method)
+    HholtzAdi(HholtzAdi<T, N>),
     /// Poisson Solver
     Poisson(Poisson<T, N>),
 }
@@ -136,6 +140,7 @@ macro_rules! derive_solver_enum {
             {
                 match self {
                     $i::<$t, $n>::Hholtz(ref t) => t.solve(input, output, axis),
+                    $i::<$t, $n>::HholtzAdi(ref t) => t.solve(input, output, axis),
                     $i::<$t, $n>::Poisson(ref t) => t.solve(input, output, axis),
                 }
             }
