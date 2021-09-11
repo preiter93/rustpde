@@ -202,7 +202,6 @@ where
         let (mat_a, mat_b) = match x {
             BaseAll::BaseR2r(ref b) => match b {
                 BaseR2r::Chebyshev(_) => {
-                    //let mass_sliced = mass.slice(s![.., 2..]);
                     let mass_sliced = mass.slice_axis(Axis(1), Slice::from(2..));
                     (pinv.dot(&mass_sliced), peye.dot(&mass_sliced))
                 }

@@ -75,12 +75,13 @@ impl<const N: usize> Poisson<f64, N> {
         let is_diag = vec_to_array::<&bool, N>(is_diags.iter().collect());
 
         // Solver
-        let mut solver = FdmaTensor::from_matrix(laplacians, masses, is_diag);
+        let mut solver = FdmaTensor::from_matrix(laplacians, masses, is_diag, 0.);
         // Handle singularity (2D)
         if N == 2 && solver.lam[0][0].abs() < 1e-10 {
             solver.lam[0] -= 1e-10;
             println!("Poisson seems singular! Eigenvalue 0 is manipulated to help out.");
         }
+
         // let solver = Box::new(solver);
         Self {
             solver: Box::new(solver),
