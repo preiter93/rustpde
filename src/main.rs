@@ -3,45 +3,45 @@ use rustpde::examples::Navier2DAdjoint;
 use rustpde::integrate;
 use rustpde::Integrate;
 
-// fn main() {
-//     // Parameters
-//     let (nx, ny) = (64, 64);
-//     let ra = 5e4;
-//     let pr = 1.;
-//     let adiabatic = true;
-//     let aspect = 1.0;
-//     let dt = 0.01;
-//     let mut navier = Navier2D::new(nx, ny, ra, pr, dt, aspect, adiabatic);
-//     // Set initial conditions
-//     // navier.set_velocity(0.2, 1., 1.);
-//     // // Want to restart?
-//     navier.read("restart.h5");
-//     navier.reset_time();
-//     // Write first field
-//     // navier.callback();
-//     integrate(&mut navier, 20., Some(1.0));
-// }
-
-fn main() {
+fn a() {
     // Parameters
     let (nx, ny) = (129, 129);
-    let ra = 2e6;
+    let ra = 1e6;
     let pr = 1.;
     let adiabatic = true;
     let aspect = 1.0;
     let dt = 0.01;
-
-    let mut navier = Navier2DAdjoint::new(nx, ny, ra, pr, dt, aspect, adiabatic);
-    // Want to restart?
+    let mut navier = Navier2D::new(nx, ny, ra, pr, dt, aspect, adiabatic);
     navier.read("restart.h5");
     navier.reset_time();
-    //navier.read("data/adjoint00290.00.h5");
-
-    //Integrate
-    integrate(&mut navier, 220., Some(1.0));
+    // Set initial conditions
+    // navier.set_velocity(0.2, 1., 1.);
+    // navier.set_temperature(0.2, 1., 1.);
+    integrate(&mut navier, 50., Some(1.0));
 }
 
-// fn main() {
+fn main() {
+    // Parameters
+    let (nx, ny) = (129, 129);
+    let ra = 1e6;
+    let pr = 1.;
+    let adiabatic = true;
+    let aspect = 1.0;
+    let dt = 5.0;
+    let timesteps = 2000.;
+    let mut navier = Navier2DAdjoint::new(nx, ny, ra, pr, dt, aspect, adiabatic);
+    navier.write_intervall = Some(10. * dt);
+    // Want to restart?
+    // navier.read("restart.h5");
+    //navier.reset_time();
+    navier.set_velocity(0.5, 1., 1.);
+    navier.set_temperature(0.2, 1., 1.);
+    navier.callback();
+    //Integrate
+    integrate(&mut navier, timesteps * dt, Some(dt));
+}
+
+// fn periodic() {
 //     // Parameters
 //     let (nx, ny) = (129, 129);
 //     let ra = 1e6;

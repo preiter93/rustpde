@@ -119,7 +119,7 @@ pub trait NavierConvectionAdjoint {
 }
 
 /// Tolerance criteria for residual
-const RES_TOL: f64 = 1e-6;
+const RES_TOL: f64 = 1e-8;
 
 type Space2R2r = Space2<BaseR2r<f64>, BaseR2r<f64>>;
 type Space2R2c = Space2<BaseR2c<f64>, BaseR2r<f64>>;
@@ -160,10 +160,10 @@ pub struct Navier2DAdjoint<T, S> {
     pub time: f64,
     /// Time step size
     pub dt: f64,
+    /// Time step size for residual calculation
+    pub dt_navier: f64,
     /// Scale of physical dimension [scale_x, scale_y]
     pub scale: [f64; 2],
-    /// Scale adjoint fields
-    scale_residual: f64,
     /// diagnostics like Nu, ...
     pub diagnostics: HashMap<String, Vec<f64>>,
     /// Time intervall for write fields
@@ -226,7 +226,8 @@ impl Navier2DAdjoint<f64, Space2R2r> {
             ]
         };
         // define underlying naver-stokes solver
-        let navier = Navier2D::new(nx, ny, ra, pr, dt, aspect, adiabatic);
+        let dt_navier = 1e-2;
+        let navier = Navier2D::new(nx, ny, ra, pr, dt_navier, aspect, adiabatic);
         // pressure
         let pres = [
             Field2::new(&Space2::new(&chebyshev(nx), &chebyshev(ny))),
@@ -265,8 +266,6 @@ impl Navier2DAdjoint<f64, Space2R2r> {
                 weight_laplacian / scale[1].powf(2.),
             ],
         ));
-        // Rescale residual
-        let scale_residual = 1e2;
 
         // // define smoother (poisson type)
         // let smooth_ux = SolverField::Poisson(Poisson::new(
@@ -290,8 +289,6 @@ impl Navier2DAdjoint<f64, Space2R2r> {
         //         -1.0 / (1. * scale[1].powf(2.)),
         //     ],
         // ));
-        // // Rescale residual
-        // let scale_residual = 1e2;
 
         let smoother = [smooth_ux, smooth_uy, smooth_temp];
         let fields_unsmoothed = [
@@ -329,8 +326,8 @@ impl Navier2DAdjoint<f64, Space2R2r> {
             pr,
             time: 0.0,
             dt,
+            dt_navier,
             scale,
-            scale_residual,
             diagnostics,
             write_intervall: None,
             res_tol: RES_TOL,
@@ -385,7 +382,8 @@ impl Navier2DAdjoint<Complex<f64>, Space2R2c> {
             Field2::new(&Space2::new(&fourier_r2c(nx), &cheb_dirichlet(ny))),
         ];
         // define underlying naver-stokes solver
-        let navier = Navier2D::new_periodic(nx, ny, ra, pr, dt, aspect);
+        let dt_navier = 1e-2;
+        let navier = Navier2D::new_periodic(nx, ny, ra, pr, dt_navier, aspect);
         // pressure
         let pres = [
             Field2::new(&Space2::new(&fourier_r2c(nx), &chebyshev(ny))),
@@ -424,8 +422,6 @@ impl Navier2DAdjoint<Complex<f64>, Space2R2c> {
                 weight_laplacian / scale[1].powf(2.),
             ],
         ));
-        // Rescale residual
-        let scale_residual = 1e2;
 
         // // define smoother (poisson type)
         // let smooth_ux = SolverField::Poisson(Poisson::new(
@@ -449,8 +445,6 @@ impl Navier2DAdjoint<Complex<f64>, Space2R2c> {
         //         -1.0 / (1. * scale[1].powf(2.)),
         //     ],
         // ));
-        // // Rescale residual
-        // let scale_residual = 1e2;
 
         let smoother = [smooth_ux, smooth_uy, smooth_temp];
         let fields_unsmoothed = [
@@ -486,8 +480,8 @@ impl Navier2DAdjoint<Complex<f64>, Space2R2c> {
             pr,
             time: 0.0,
             dt,
+            dt_navier,
             scale,
-            scale_residual,
             diagnostics,
             write_intervall: None,
             res_tol: RES_TOL,
@@ -650,8 +644,6 @@ macro_rules! impl_navier_convection {
                 let conv = self.conv_ux(ux, uy, temp);
                 self.rhs += &(conv * self.dt);
                 // + diffusion
-                // let nu = self.nu / self.scale_residual;
-                // self.rhs += &(&self.fields_unsmoothed[0] * self.dt * nu);
                 self.rhs += &(self.ux[1].gradient([2, 0], Some(self.scale)) * self.dt * self.nu);
                 self.rhs += &(self.ux[1].gradient([0, 2], Some(self.scale)) * self.dt * self.nu);
                 // update ux
@@ -674,8 +666,6 @@ macro_rules! impl_navier_convection {
                 let conv = self.conv_uy(ux, uy, temp);
                 self.rhs += &(conv * self.dt);
                 // + diffusion
-                // let nu = self.nu / self.scale_residual;
-                // self.rhs += &(&self.fields_unsmoothed[1] * self.dt * nu);
                 self.rhs += &(self.uy[1].gradient([2, 0], Some(self.scale)) * self.dt * self.nu);
                 self.rhs += &(self.uy[1].gradient([0, 2], Some(self.scale)) * self.dt * self.nu);
                 // update uy
@@ -694,8 +684,6 @@ macro_rules! impl_navier_convection {
                 let buoy = self.uy[1].to_ortho();
                 self.rhs += &(buoy * self.dt);
                 // + diffusion
-                // let ka = self.ka / self.scale_residual;
-                // self.rhs += &(&self.fields_unsmoothed[2] * self.dt * ka);
                 self.rhs += &(self.temp[1].gradient([2, 0], Some(self.scale)) * self.dt * self.ka);
                 self.rhs += &(self.temp[1].gradient([0, 2], Some(self.scale)) * self.dt * self.ka);
                 // update temp
@@ -754,13 +742,13 @@ macro_rules! impl_navier_convection {
                 self.navier.uy.vhat.assign(&self.uy[0].vhat);
                 self.navier.temp.vhat.assign(&self.temp[0].vhat);
                 self.navier.update();
-                let res = (&self.navier.ux.vhat - &self.ux[0].vhat) / self.dt;
+                let res = (&self.navier.ux.vhat - &self.ux[0].vhat) / self.navier.dt;
                 self.navier.ux.vhat.assign(&res);
-                let res = (&self.navier.uy.vhat - &self.uy[0].vhat) / self.dt;
+                let res = (&self.navier.uy.vhat - &self.uy[0].vhat) / self.navier.dt;
                 self.navier.uy.vhat.assign(&res);
-                let res = (&self.navier.temp.vhat - &self.temp[0].vhat) / self.dt;
+                let res = (&self.navier.temp.vhat - &self.temp[0].vhat) / self.navier.dt;
                 self.navier.temp.vhat.assign(&res);
-                // Save unsmoothed fields for diffusion
+                // Save "unsmoothed" residual fields
                 self.fields_unsmoothed[0].assign(&self.navier.ux.to_ortho());
                 self.fields_unsmoothed[1].assign(&self.navier.uy.to_ortho());
                 self.fields_unsmoothed[2].assign(&self.navier.temp.to_ortho());
@@ -768,14 +756,10 @@ macro_rules! impl_navier_convection {
                 self.smoother[0].solve(&self.fields_unsmoothed[0], &mut self.ux[1].vhat, 0);
                 self.smoother[1].solve(&self.fields_unsmoothed[1], &mut self.uy[1].vhat, 0);
                 self.smoother[2].solve(&self.fields_unsmoothed[2], &mut self.temp[1].vhat, 0);
-                let one: Self::Spectral = (-1.0 * self.scale_residual).into();
-                self.ux[1].vhat *= one;
-                self.uy[1].vhat *= one;
-                self.temp[1].vhat *= one;
-                // let scale_into: Self::Spectral = self.scale_residual.into();
-                // self.ux[1].vhat /= scale_into;
-                // self.uy[1].vhat /= scale_into;
-                // self.temp[1].vhat /= scale_into;
+                let rescale: Self::Spectral = (-1.0).into();
+                self.ux[1].vhat *= rescale;
+                self.uy[1].vhat *= rescale;
+                self.temp[1].vhat *= rescale;
             }
         }
     };
@@ -890,7 +874,7 @@ macro_rules! impl_integrate {
                 let res_u2 = $norm(&self.ux[1].vhat);
                 let res_v2 = $norm(&self.uy[1].vhat);
                 let res_t2 = $norm(&self.temp[1].vhat);
-                let res_total2 = res_u2 + res_v2 + res_t2;
+                let res_total2 = (res_u2 + res_v2 + res_t2);
                 println!("|U| = {:10.2e}", res_u2,);
                 println!("|V| = {:10.2e}", res_v2,);
                 println!("|T| = {:10.2e}", res_t2,);
@@ -909,6 +893,7 @@ macro_rules! impl_integrate {
                 // Break if divergence is nan
                 let div = self.divergence();
                 if $norm(&div).is_nan() {
+                    println!("Divergence is nan!");
                     return true;
                 }
                 // Break if residual is small enough
@@ -916,6 +901,7 @@ macro_rules! impl_integrate {
                 let res_v = $norm(&self.uy[1].vhat);
                 let res_t = $norm(&self.temp[1].vhat);
                 if res_u + res_v + res_t < self.res_tol {
+                    println!("Residual reached!");
                     return true;
                 }
                 false
