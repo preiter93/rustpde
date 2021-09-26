@@ -246,21 +246,21 @@ impl Navier2DAdjoint<f64, Space2R2r> {
         // define smoother (hholtz type) (1-weight*D2)
         let weight_laplacian = 1e0;
         let smooth_ux = SolverField::Hholtz(Hholtz::new(
-            &ux[0],
+            &ux[1],
             [
                 weight_laplacian / scale[0].powf(2.),
                 weight_laplacian / scale[1].powf(2.),
             ],
         ));
         let smooth_uy = SolverField::Hholtz(Hholtz::new(
-            &uy[0],
+            &uy[1],
             [
                 weight_laplacian / scale[0].powf(2.),
                 weight_laplacian / scale[1].powf(2.),
             ],
         ));
         let smooth_temp = SolverField::Hholtz(Hholtz::new(
-            &temp[0],
+            &temp[1],
             [
                 weight_laplacian / scale[0].powf(2.),
                 weight_laplacian / scale[1].powf(2.),

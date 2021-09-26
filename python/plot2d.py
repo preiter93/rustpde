@@ -30,8 +30,15 @@ with h5py.File(filename, "r") as f:
     v = np.array(f["uy/v"])
     x = np.array(f["x"])
     y = np.array(f["y"])
+    try:
+        vorticity = np.array(f["vorticity/v"])
+    except:
+        vorticity = None
 
 print("Plot {:}".format(filename))
 fig, ax = plot_streamplot(x, y, t, u, v, return_fig=True)
 fig.savefig("fig.png", bbox_inches="tight", dpi=200)
 plt.show()
+if vorticity is not None:
+    fig, ax = plot_streamplot(x, y, vorticity, u, v, return_fig=True)
+    plt.show()

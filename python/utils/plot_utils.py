@@ -47,8 +47,10 @@ def plot_streamplot(x, y, t, u, v, return_fig=False):
     xx, yy = np.meshgrid(x,y,indexing="ij")
 
     fig, ax = plt.subplots()
+    tmax = np.amax(np.abs(t))
+    tmin = -tmax
     ax.contourf(
-        xx, yy, t, levels=np.linspace(t.min(), t.max(), 401), cmap=SETTINGS["cmap"]
+        xx, yy, t, levels=np.linspace(tmin, tmax, 401), cmap=SETTINGS["cmap"]
     )
     ax.set_aspect(1)
     ax.set_xticks([])
