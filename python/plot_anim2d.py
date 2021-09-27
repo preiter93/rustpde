@@ -79,7 +79,7 @@ fps = n_frames / settings["duration"]
 # Execute FFmpeg sub-process, with stdin pipe as input, and jpeg_pipe input format
 process = (
     ffmpeg.input("pipe:", r=fps, f="png_pipe")
-    .output(settings["filename"], vcodec="libx264", pix_fmt='yuv420p')
+    .output(settings["filename"], vcodec="libx264", pix_fmt="yuv420p")
     .overwrite_output()
     .run_async(pipe_stdin=True)
 )
