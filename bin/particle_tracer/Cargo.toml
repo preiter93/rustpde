@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 ndarray = { version = "0.15", features = ["rayon"] }
 hdf5-interface = { git = "https://github.com/preiter93/hdf5-interface", branch = "master" }
+rand = "0.8.4"
 
 [lib]
 name = "particle_tracer"
