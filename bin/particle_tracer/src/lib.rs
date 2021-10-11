@@ -17,7 +17,7 @@
 //!     for (i, xi) in x.iter().enumerate() {
 //!         for (j, yi) in y.iter().enumerate() {
 //!             ux[[i,j]] = -yi;
-//!             uy[[i,j]] = *xi;    
+//!             uy[[i,j]] = *xi;
 //!         }
 //!     }
 //!
@@ -33,15 +33,15 @@
 //!     particle.write("test_trajectory.txt").unwrap();
 //! }
 //! ```
+#![allow(dead_code)]
 extern crate hdf5_interface;
 pub use hdf5_interface::read_from_hdf5;
 pub use hdf5_interface::read_scalar_from_hdf5;
 pub use hdf5_interface::write_scalar_to_hdf5;
 pub use hdf5_interface::write_to_hdf5;
 pub use hdf5_interface::Result as Hdf5Result;
-
 use ndarray::prelude::*;
-
+use rand::{self, Rng};
 use std::fmt;
 
 type Result<T> = std::result::Result<T, TracerError>;
@@ -55,6 +55,112 @@ pub struct TracerError;
 impl fmt::Display for TracerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "particle went out of bounds.")
+    }
+}
+
+pub struct ParticleSwarm<'a> {
+    /// Array of Particles
+    pub particles: Vec<Particle<'a>>,
+    /// Reference to x-coordinate
+    pub x: &'a [f64],
+    /// Reference to y-coordinate
+    pub y: &'a [f64],
+    /// Timestep size
+    pub timestep: f64,
+    /// Current time
+    pub time: f64,
+}
+
+impl<'a> ParticleSwarm<'a> {
+    /// Initialize new Particle
+    #[must_use]
+    pub fn init(position: Vec<(f64, f64)>, x: &'a [f64], y: &'a [f64], timestep: f64) -> Self {
+        let mut particles: Vec<Particle> = vec![];
+        for pos in position {
+            particles.push(Particle::init(pos.0, pos.1, x, y, timestep));
+        }
+        Self {
+            particles,
+            x,
+            y,
+            timestep,
+            time: 0.,
+        }
+    }
+
+    /// Initialize rectangular particle swarm
+    #[must_use]
+    pub fn from_rectangle(
+        x0: f64,
+        y0: f64,
+        range: f64,
+        n: usize,
+        x: &'a [f64],
+        y: &'a [f64],
+        timestep: f64,
+    ) -> Self {
+        let mut rng = rand::thread_rng();
+        let mut swarm: Vec<(f64, f64)> = vec![];
+        for _ in 0..n {
+            let x = x0 + rng.gen_range(-range..range);
+            let y = y0 + rng.gen_range(-range..range);
+            swarm.push((x, y))
+        }
+        Self::init(swarm, x, y, timestep)
+    }
+
+    /// Read particle coordinates from file
+    ///
+    /// # Panics
+    /// Unable to read file
+    #[must_use]
+    pub fn from_file(fname: &str, x: &'a [f64], y: &'a [f64], timestep: f64) -> Self {
+        use std::fs::File;
+        use std::io::{BufRead, BufReader};
+        // Open the file in read-only mode (ignoring errors).
+        let file = File::open(fname).unwrap();
+        let reader = BufReader::new(file);
+        // Read the file
+        let mut swarm: Vec<(f64, f64)> = vec![];
+        for line in reader.lines() {
+            let line = line.unwrap(); // Ignore errors.
+            let particle: Vec<f64> = line
+                .split(' ')
+                .map(|x| x.parse().expect("Not a float!"))
+                .collect();
+            let x_pos = particle[1];
+            let y_pos = particle[2];
+            swarm.push((x_pos, y_pos));
+        }
+        Self::init(swarm, x, y, timestep)
+    }
+
+    /// Update position using rk4
+    pub fn update(&mut self, u: &[&ArrayView2<f64>]) {
+        for particle in &mut self.particles {
+            // Ignore the error
+            let _ = particle.update_rk4(u);
+        }
+        self.time += self.timestep;
+    }
+
+    /// Write to file
+    ///
+    /// # Errors
+    /// Unable to create file
+    #[allow(clippy::write_with_newline)]
+    pub fn write(&mut self, fname: &str) -> std::io::Result<()> {
+        use std::fs::File;
+        use std::io::Write;
+        let mut f = File::create(fname).expect("Unable to create file");
+        for particle in &mut self.particles {
+            write!(
+                f,
+                "{} {} {}\n",
+                particle.time, particle.x_pos, particle.y_pos
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -73,16 +179,15 @@ pub struct Particle<'a> {
     pub y: &'a [f64],
     /// History of coordinates (Time | x_pos | y_pos)
     pub history: Vec<(f64, f64, f64)>,
-    /// Save every x time units
-    pub intervall: Option<f64>,
+    /// Save every x time units. If none, save never.
+    pub save_intervall: Option<f64>,
 }
 
 impl<'a> Particle<'a> {
     /// Initialize new Particle
     #[must_use]
-    pub fn init(x_pos: f64, y_pos: f64, x: &'a [f64], y: &'a [f64]) -> Self {
+    pub fn init(x_pos: f64, y_pos: f64, x: &'a [f64], y: &'a [f64], timestep: f64) -> Self {
         let time = 0.;
-        let timestep = 0.1;
         Self {
             x_pos,
             y_pos,
@@ -91,13 +196,13 @@ impl<'a> Particle<'a> {
             x,
             y,
             history: Vec::new(),
-            intervall: None,
+            save_intervall: None,
         }
     }
 
     /// Set intervall for saving trajectory ( default is every timestep )
-    pub fn set_intervall(&mut self, intervall: f64) {
-        self.intervall = Some(intervall);
+    pub fn set_save_intervall(&mut self, save_intervall: f64) {
+        self.save_intervall = Some(save_intervall);
     }
 
     /// Set timestep size ( defaul = 0.1 )
@@ -209,13 +314,13 @@ impl<'a> Particle<'a> {
 
     /// Save history
     pub fn push(&mut self) {
-        if let Some(x) = self.intervall {
+        if let Some(x) = self.save_intervall {
             if (self.time % x) < self.timestep / 2. || (self.time % x) > x - self.timestep / 2. {
                 self.history.push((self.time, self.x_pos, self.y_pos));
             }
-        } else {
-            self.history.push((self.time, self.x_pos, self.y_pos));
-        }
+        } //else {
+          //    self.history.push((self.time, self.x_pos, self.y_pos));
+          //}
     }
 
     /// Write to file

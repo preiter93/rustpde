@@ -27,6 +27,25 @@ def _calculate_streamfunction(x,y,u,v):
 
     return psi
 
+def plot_contour(x, y, t, u, v, skip=None, return_fig=False):
+    if SETTINGS["cmap"] == "gfcmap":
+        set_gfcmap()
+    xx, yy = np.meshgrid(x,y,indexing="ij")
+
+    fig, ax = plt.subplots()
+    ax.contourf(
+        xx, yy, t, levels=np.linspace(t.min(), t.max(), 101), cmap=SETTINGS["cmap"]
+    )
+    ax.set_aspect(1)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlim(x.min(), x.max())
+    ax.set_ylim(y.min(), y.max())
+
+    if return_fig:
+        return fig, ax
+    plt.show()
+
 def plot_quiver(x, y, t, u, v, skip=None, return_fig=False):
     if SETTINGS["cmap"] == "gfcmap":
         set_gfcmap()
