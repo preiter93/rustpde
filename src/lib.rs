@@ -23,15 +23,15 @@
 //! ## Implemented solver
 //!
 //! - `2-D Rayleigh Benard Convection: Direct numerical simulation`,
-//! see [`examples::navier`]
+//! see [`navier::navier`]
 //! - `2-D Rayleigh Benard Convection: Steady state solver`,
-//! see [`examples::navier_adjoint`]
+//! see [`navier::navier_adjoint`]
 //!
 //! # Example
 //! Solve 2-D Rayleigh Benard Convection ( Run with `cargo run --release` )
 //! ```ignore
 //! use rustpde::integrate;
-//! use rustpde::examples::Navier2D;
+//! use rustpde::navier::Navier2D;
 //! use rustpde::Integrate;
 //!
 //! fn main() {
@@ -55,7 +55,7 @@
 //! Solve 2-D Rayleigh Benard Convection with periodic sidewall
 //! ```ignore
 //! use rustpde::integrate;
-//! use rustpde::examples::Navier2D;
+//! use rustpde::navier::Navier2D;
 //! use rustpde::Integrate;
 //!
 //! fn main() {
@@ -113,7 +113,7 @@
 #[macro_use]
 extern crate enum_dispatch;
 pub mod bases;
-pub mod examples;
+pub mod navier;
 pub mod field;
 pub mod hdf5;
 pub mod solver;
