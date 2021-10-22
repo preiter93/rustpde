@@ -7,7 +7,7 @@
 //! Find steady state solution of large scale circulation
 //! ```ignore
 //! use rustpde::{Integrate, integrate};
-//! use rustpde::examples::Navier2DAdjoint;
+//! use rustpde::navier::Navier2DAdjoint;
 //!
 //! fn main() {
 //!     // Parameters

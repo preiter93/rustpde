@@ -1,6 +1,6 @@
-use rustpde::examples::vorticity_from_file;
-use rustpde::examples::Navier2D;
-use rustpde::examples::Navier2DAdjoint;
+use rustpde::navier::vorticity_from_file;
+use rustpde::navier::Navier2D;
+use rustpde::navier::Navier2DAdjoint;
 use rustpde::integrate;
 use rustpde::Integrate;
 
@@ -71,7 +71,7 @@ fn main() {
 // }
 
 // fn roughness() {
-//     use rustpde::examples::solid_masks::solid_roughness_sinusoid;
+//     use rustpde::navier::solid_masks::solid_roughness_sinusoid;
 //     // Parameters
 //     let (nx, ny) = (512, 257);
 //     let ra = 3e8;
