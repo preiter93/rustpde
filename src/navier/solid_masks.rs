@@ -3,9 +3,9 @@
 //! Solve 2-D Rayleigh Benard Convection with cylindrical obstacle
 //! ```ignore
 //! use rustpde::integrate;
-//! use rustpde::examples::Navier2D;
+//! use rustpde::navier::Navier2D;
 //! use rustpde::Integrate;
-//! use rustpde::examples::solid_masks::solid_cylinder_inner;
+//! use rustpde::navier::solid_masks::solid_cylinder_inner;
 //!
 //! fn main() {
 //!     // Parameters
