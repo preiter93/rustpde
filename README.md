@@ -7,6 +7,10 @@
 - cargo >= v1.49
 - `hdf5` (sudo apt-get install -y libhdf5-dev)
 
+And for versions > 0.2.0:
+- mpi installation
+- libclang
+
 ## Details
 
 This library is intended for simulation softwares which solve the
