@@ -6,7 +6,7 @@
 //! Solve 2-D Rayleigh Benard Convection
 //! ```ignore
 //! use rustpde::{Integrate, integrate};
-//! use rustpde::examples::Navier2D;
+//! use rustpde::navier::Navier2D;
 //!
 //! fn main() {
 //!     // Parameters
@@ -136,7 +136,7 @@ pub trait NavierConvection {
 ///
 /// ```
 /// use rustpde::{integrate, Integrate};
-/// use rustpde::examples::Navier2D;
+/// use rustpde::navier::Navier2D;
 /// let (nx, ny) = (33, 33);
 /// let ra = 1e5;
 /// let pr = 1.;

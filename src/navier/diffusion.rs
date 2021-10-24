@@ -18,7 +18,7 @@ use ndarray::{Array1, Array2};
 ///
 ///```
 /// use rustpde::*;
-/// use rustpde::examples::diffusion::Diffusion1D;
+/// use rustpde::navier::diffusion::Diffusion1D;
 /// let mut field = Field1::new(&Space1::new(&cheb_dirichlet(7)));
 /// let mut diff = Diffusion1D::new(field, 1.0, 0.1);
 /// diff.impulse();
@@ -116,7 +116,7 @@ where
 ///
 ///```
 /// use rustpde::*;
-/// use rustpde::examples::diffusion::Diffusion2D;
+/// use rustpde::navier::diffusion::Diffusion2D;
 /// let space = Space2::new(&cheb_dirichlet(7), &cheb_dirichlet(7));
 /// let mut field = Field2::new(&space);
 /// let mut diff = Diffusion2D::new(field, 1.0, 0.1);
