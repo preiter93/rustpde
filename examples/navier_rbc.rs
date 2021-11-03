@@ -2,8 +2,8 @@
 //! in a bounded domain
 //!
 //! cargo run --release --example navier_rbc
-use rustpde::navier::Navier2D;
 use rustpde::integrate;
+use rustpde::navier::Navier2D;
 // use rustpde::Integrate;
 
 fn main() {

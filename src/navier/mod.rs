@@ -1,9 +1,11 @@
 //! Collection of partial diff equations for *rustpde*
+#![allow(clippy::module_inception)]
 pub mod conv_term;
 pub mod diffusion;
 pub mod functions;
 pub mod navier;
 pub mod navier_adjoint;
+pub mod statistics;
 // pub mod navier_periodic;
 pub mod solid_masks;
 pub mod vorticity;
