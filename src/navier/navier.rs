@@ -27,6 +27,7 @@
 //! }
 //! ```
 use super::conv_term;
+use super::statistics::Statistics;
 use crate::bases::fourier_r2c;
 use crate::bases::{cheb_dirichlet, cheb_dirichlet_bc, cheb_neumann, chebyshev};
 use crate::bases::{BaseR2c, BaseR2r};
@@ -36,7 +37,6 @@ use crate::solver::{Hholtz, HholtzAdi, Poisson, Solve, SolverField};
 use crate::types::Scalar;
 use crate::Integrate;
 use ndarray::{s, Array1, Array2};
-
 use num_complex::Complex;
 use num_traits::Zero;
 use std::collections::HashMap;
@@ -54,8 +54,10 @@ pub fn get_ka(ra: f64, pr: f64, height: f64) -> f64 {
     f.sqrt()
 }
 
-type Space2R2r = Space2<BaseR2r<f64>, BaseR2r<f64>>;
-type Space2R2c = Space2<BaseR2c<f64>, BaseR2r<f64>>;
+/// Two-dimensional space with real-to-real transform
+pub type Space2R2r = Space2<BaseR2r<f64>, BaseR2r<f64>>;
+/// Two-dimensional space with real-to-complex transform
+pub type Space2R2c = Space2<BaseR2c<f64>, BaseR2r<f64>>;
 
 /// Implement the ndividual terms of the Navier-Stokes equation
 /// as a trait. This is necessary to support both real and complex
@@ -150,7 +152,7 @@ pub trait NavierConvection {
 /// ```
 pub struct Navier2D<T, S> {
     /// Field for derivatives and transforms
-    field: Field2<T, S>,
+    pub field: Field2<T, S>,
     /// Temperature
     pub temp: Field2<T, S>,
     /// Horizontal Velocity
@@ -166,9 +168,9 @@ pub struct Navier2D<T, S> {
     /// Field for temperature boundary condition
     pub fieldbc: Option<Field2<T, S>>,
     /// Viscosity
-    nu: f64,
+    pub nu: f64,
     /// Thermal diffusivity
-    ka: f64,
+    pub ka: f64,
     /// Rayleigh number
     pub ra: f64,
     /// Prandtl number
@@ -188,6 +190,8 @@ pub struct Navier2D<T, S> {
     pub solid: Option<[Array2<f64>; 2]>,
     /// Set true and the fields will be dealiased
     pub dealias: bool,
+    /// If set, collect statistics
+    pub statistics: Option<Statistics<T, S>>,
 }
 
 impl Navier2D<f64, Space2R2r>
@@ -290,6 +294,7 @@ impl Navier2D<f64, Space2R2r>
             write_intervall: None,
             solid: None,
             dealias: true,
+            statistics: None,
         };
         navier._scale();
         // Boundary condition
@@ -449,6 +454,7 @@ impl Navier2D<Complex<f64>, Space2R2c>
             write_intervall: None,
             solid: None,
             dealias: true,
+            statistics: None,
         };
         navier._scale();
         // Boundary condition
@@ -783,6 +789,28 @@ macro_rules! impl_integrate_for_navier {
                     }
                 } else {
                     self.write(&fname);
+                }
+
+                // Write statistics
+                let statname = "data/statistics.nc";
+                if let Some(ref mut statistics) = self.statistics {
+                    // Update
+                    if (self.time % &statistics.save_stat) < self.dt / 2.
+                        || (self.time % &statistics.save_stat) > &statistics.save_stat - self.dt / 2.
+                    {
+                        let that = if let Some(x) = &self.fieldbc {
+                            (&self.temp.to_ortho() + &x.to_ortho()).to_owned()
+                        } else {
+                            self.temp.to_ortho()
+                        };
+                        statistics.update(&that, &self.ux.to_ortho(), &self.uy.to_ortho(), self.time);
+                    }
+                    // Write
+                    if (self.time % &statistics.write_stat) < self.dt / 2.
+                        || (self.time % &statistics.write_stat) > &statistics.write_stat - self.dt / 2.
+                    {
+                        statistics.write(&statname);
+                    }
                 }
 
                 // I/O

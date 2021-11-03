@@ -113,9 +113,9 @@
 #[macro_use]
 extern crate enum_dispatch;
 pub mod bases;
-pub mod navier;
 pub mod field;
 pub mod hdf5;
+pub mod navier;
 pub mod solver;
 pub mod types;
 pub use bases::{cheb_dirichlet, cheb_neumann, chebyshev, fourier_c2c, fourier_r2c};

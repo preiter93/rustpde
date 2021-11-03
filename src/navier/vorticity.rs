@@ -8,6 +8,9 @@ use num_traits::Zero;
 
 /// Read velocities from file,
 /// calculate dudy - dvdx and append vortictiy
+///
+/// # Panics
+/// If reading dimension from file fails
 pub fn vorticity_from_file(fname: &str) {
     let nx = hdf5_get_size_dimension(&fname, "x").unwrap();
     let ny = hdf5_get_size_dimension(&fname, "y").unwrap();

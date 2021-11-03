@@ -2,9 +2,9 @@
 //! in a bounded domain with roughness elements
 //!
 //! cargo run --release --example navier_rbc_roughness
-use rustpde::navier::Navier2D;
-use rustpde::navier::solid_masks::solid_roughness_sinusoid;
 use rustpde::integrate;
+use rustpde::navier::solid_masks::solid_roughness_sinusoid;
+use rustpde::navier::Navier2D;
 // use rustpde::Integrate;
 
 fn main() {
