@@ -792,7 +792,7 @@ macro_rules! impl_integrate_for_navier {
                 }
 
                 // Write statistics
-                let statname = "data/statistics.nc";
+                let statname = "data/statistics.h5";
                 if let Some(ref mut statistics) = self.statistics {
                     // Update
                     if (self.time % &statistics.save_stat) < self.dt / 2.

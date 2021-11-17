@@ -71,15 +71,18 @@ use std::ops::{Add, Div, Mul};
 #[derive(Debug, Clone)]
 #[allow(clippy::similar_names)]
 pub struct FdmaTensor<T, const N: usize> {
-    n: usize,
-    fdma: [Fdma<T>; 2],
+    /// Problem size
+    pub n: usize,
+    /// One dimensional fdma solver (four diagonal sparse)
+    pub fdma: [Fdma<T>; 2],
     /// Multiply before, of size (N-1)
-    fwd: Vec<Option<Array2<T>>>,
+    pub fwd: Vec<Option<Array2<T>>>,
     /// Multiply after, of size (N-1)
-    bwd: Vec<Option<Array2<T>>>,
+    pub bwd: Vec<Option<Array2<T>>>,
     /// Eigenvalues, of size (N-1)
     pub lam: Vec<Array1<T>>,
-    singular: bool,
+    /// Define wether problem is singular (pure neumann for example)
+    pub singular: bool,
     /// Additional constant for hholtz problems
     pub alpha: T,
 }
