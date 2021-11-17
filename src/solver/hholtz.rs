@@ -36,30 +36,6 @@ pub struct Hholtz<T, const N: usize>
 }
 
 impl<const N: usize> Hholtz<f64, N> {
-    // /// Construct Helmholtz solver from field:
-    // ///
-    // ///  (I-c*D2) vhat = A f
-    // pub fn new<T2, S>(field: &FieldBase<f64, f64, T2, S, N>, c: [f64; N]) -> Self
-    // where
-    //     S: BaseSpace<f64, N, Physical = f64, Spectral = T2>,
-    // {
-    //     // Gather matrices and preconditioner
-    //     let mut solver: Vec<Solver<f64>> = Vec::new();
-    //     let mut matvec: Vec<Option<MatVec<f64>>> = Vec::new();
-    //     for (axis, ci) in c.iter().enumerate() {
-    //         // Matrices and preconditioner
-    //         let (mat_a, mat_b, precond) = field.ingredients_for_hholtz(axis);
-    //         let mat: Array2<f64> = mat_a - mat_b * *ci;
-    //         let solver_axis = Solver::Fdma(Fdma::from_matrix(&mat));
-    //         let matvec_axis = precond.map(|x| MatVec::MatVecFdma(MatVecFdma::new(&x)));
-    //
-    //         solver.push(solver_axis);
-    //         matvec.push(matvec_axis);
-    //     }
-    //
-    //     Self { solver, matvec }
-    // }
-
     /// Construct Helmholtz solver from field:
     ///
     ///  (I-c*D2) vhat = A f
@@ -92,6 +68,45 @@ impl<const N: usize> Hholtz<f64, N> {
 
         // Solver
         let solver = FdmaTensor::from_matrix(laplacians, masses, is_diag, 1.0);
+
+        Self {
+            solver: Box::new(solver),
+            matvec,
+        }
+    }
+
+    /// Construct Helmholtz solver from field:
+    ///
+    ///  (alph*I-c*D2) vhat = A f
+    pub fn new2<T2, S>(field: &FieldBase<f64, f64, T2, S, N>, c: [f64; N], alpha: f64) -> Self
+    where
+        S: BaseSpace<f64, N, Physical = f64, Spectral = T2>,
+    {
+        // Gather matrices and preconditioner
+        let mut laplacians: Vec<Array2<f64>> = Vec::new();
+        let mut masses: Vec<Array2<f64>> = Vec::new();
+        let mut is_diags: Vec<bool> = Vec::new();
+        let mut matvec: Vec<Option<MatVec<f64>>> = Vec::new();
+        for (axis, ci) in c.iter().enumerate() {
+            // Matrices and preconditioner
+            let (mat_a, mat_b, precond, is_diag) = field.ingredients_for_poisson(axis);
+            let mass = mat_a;
+            let laplacian = -1.0 * mat_b * *ci;
+            let matvec_axis = precond.map(|x| MatVec::MatVecFdma(MatVecFdma::new(&x)));
+
+            laplacians.push(laplacian);
+            masses.push(mass);
+            matvec.push(matvec_axis);
+            is_diags.push(is_diag);
+        }
+
+        // Vectors -> Arrays
+        let laplacians = vec_to_array::<&Array2<f64>, N>(laplacians.iter().collect());
+        let masses = vec_to_array::<&Array2<f64>, N>(masses.iter().collect());
+        let is_diag = vec_to_array::<&bool, N>(is_diags.iter().collect());
+
+        // Solver
+        let solver = FdmaTensor::from_matrix(laplacians, masses, is_diag, alpha);
 
         Self {
             solver: Box::new(solver),
@@ -147,6 +162,7 @@ where
         S1: ndarray::Data<Elem = A>,
         S2: ndarray::Data<Elem = A> + ndarray::DataMut,
     {
+        use ndarray::Zip;
         // Matvec
         let mut rhs = self.matvec[0]
             .as_ref()
@@ -154,8 +170,30 @@ where
         if let Some(x) = &self.matvec[1] {
             rhs = x.solve(&rhs, 1);
         };
-        // Solve fdma-tensor
-        self.solver.solve(&rhs, output, 0);
+        // Solve fdma-tensor system
+        let solver = &self.solver;
+        // Step 1: Forward Transform rhs along x
+        if let Some(p) = &solver.fwd[0] {
+            let p_cast: Array2<A> = p.mapv(|x| x.into());
+            output.assign(&p_cast.dot(&rhs));
+        } else {
+            output.assign(&rhs);
+        }
+        // Step 2: Solve along y (but iterate over all lanes in x)
+        Zip::from(output.outer_iter_mut())
+            .and(solver.lam[0].outer_iter())
+            .par_for_each(|mut out, lam| {
+                let l = lam.as_slice().unwrap()[0] + solver.alpha;
+                let mut fdma = &solver.fdma[0] + &(&solver.fdma[1] * l);
+                fdma.sweep();
+                fdma.solve(&out.to_owned(), &mut out, 0);
+            });
+
+        // Step 3: Backward Transform solution along x
+        if let Some(q) = &solver.bwd[0] {
+            let q_cast: Array2<A> = q.mapv(|x| x.into());
+            output.assign(&q_cast.dot(output));
+        }
     }
 }
 

@@ -116,7 +116,6 @@ def plot_streamplot(x, y, t, u, v, return_fig=False, cbar=False):
     lw = 0.8 * speed.T / np.abs(speed).max()
     ax.streamplot(xi, yi, ui.T, vi.T, density=0.75, color="k", linewidth=lw)
     if cbar:
-        print("cbar")
         fig.colorbar(cs)
     if return_fig:
         return fig, ax
