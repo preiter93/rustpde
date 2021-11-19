@@ -8,7 +8,7 @@ fn main() {
     let space = Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(ny));
     let mut field = Field2::new(&space);
     let alpha = 1e-1;
-    let hholtz = Hholtz::new2(&field, [1.0, 1.0], 1./alpha);
+    let hholtz = Hholtz::new2(&field, [1.0, 1.0], 1. / alpha);
     let x = &field.x[0];
     let y = &field.x[1];
 
