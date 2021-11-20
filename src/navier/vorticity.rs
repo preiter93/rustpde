@@ -17,24 +17,23 @@
 //!        .collect();
 //!    for f in files.iter() {
 //!        let fname = f.to_str().unwrap();
-//!        vorticity_from_file(&fname);
+//!        vorticity_from_file(&fname).unwrap();
 //! }
 //! ```
 use crate::BaseSpace;
 use crate::ReadField;
-use crate::WriteField;
-use crate::{cheb_dirichlet, fourier_r2c, hebyshev, Field2, Space2};
+use crate::{cheb_dirichlet, chebyshev, fourier_r2c, Field2, Space2};
 use hdf5_interface::hdf5_get_size_dimension;
 use num_traits::Zero;
+use crate::hdf5::Result;
+use crate::hdf5::write_to_hdf5;
+use crate::hdf5::write_to_hdf5_complex;
 
 /// Read velocities from file,
 /// calculate dudy - dvdx and append vortictiy
-///
-/// # Panics
-/// If reading dimension from file fails
-pub fn vorticity_from_file(fname: &str) {
-    let nx = hdf5_get_size_dimension(&fname, "x").unwrap();
-    let ny = hdf5_get_size_dimension(&fname, "y").unwrap();
+pub fn vorticity_from_file(fname: &str) -> Result<()> {
+    let nx = hdf5_get_size_dimension(&fname, "x")?;
+    let ny = hdf5_get_size_dimension(&fname, "y")?;
     let mut ux = Field2::new(&Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(ny)));
     let mut uy = Field2::new(&Space2::new(&cheb_dirichlet(nx), &cheb_dirichlet(ny)));
     let mut vorticity = Field2::new(&Space2::new(&chebyshev(nx), &chebyshev(ny)));
@@ -45,16 +44,18 @@ pub fn vorticity_from_file(fname: &str) {
     vorticity.vhat.assign(&(dvdx - dudz));
     dealias(&mut vorticity);
     vorticity.backward();
-    vorticity.write(&fname, Some("vorticity"));
+    write_to_hdf5(fname, "v", Some("vorticity"), &vorticity.v)?;
+    write_to_hdf5(fname, "vhat", Some("vorticity"), &vorticity.vhat)?;
+    Ok(())
 }
 
 /// Read velocities from file,
 /// calculate dudy - dvdx and append vortictiy
 ///
 /// x-direction is periodic
-pub fn vorticity_from_file_periodic(fname: &str) {
-    let nx = hdf5_get_size_dimension(&fname, "x").unwrap();
-    let ny = hdf5_get_size_dimension(&fname, "y").unwrap();
+pub fn vorticity_from_file_periodic(fname: &str) -> Result<()> {
+    let nx = hdf5_get_size_dimension(&fname, "x")?;
+    let ny = hdf5_get_size_dimension(&fname, "y")?;
     let mut ux = Field2::new(&Space2::new(&fourier_r2c(nx), &cheb_dirichlet(ny)));
     let mut uy = Field2::new(&Space2::new(&fourier_r2c(nx), &cheb_dirichlet(ny)));
     let mut vorticity = Field2::new(&Space2::new(&fourier_r2c(nx), &chebyshev(ny)));
@@ -65,7 +66,9 @@ pub fn vorticity_from_file_periodic(fname: &str) {
     vorticity.vhat.assign(&(dvdx - dudz));
     dealias(&mut vorticity);
     vorticity.backward();
-    vorticity.write(&fname, Some("vorticity"));
+    write_to_hdf5(fname, "v", Some("vorticity"), &vorticity.v)?;
+    write_to_hdf5_complex(fname, "vhat", Some("vorticity"), &vorticity.vhat)?;
+    Ok(())
 }
 
 /// Dealias field (2/3 rule)
