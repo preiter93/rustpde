@@ -1,7 +1,7 @@
 use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
 use rustpde::cheb_dirichlet;
-use rustpde::examples::diffusion::Diffusion2D;
+use rustpde::navier::diffusion::Diffusion2D;
 use rustpde::Integrate;
 use rustpde::{Field2, Space2};
 

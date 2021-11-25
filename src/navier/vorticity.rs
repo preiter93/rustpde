@@ -20,14 +20,14 @@
 //!        vorticity_from_file(&fname).unwrap();
 //! }
 //! ```
+use crate::hdf5::write_to_hdf5;
+use crate::hdf5::write_to_hdf5_complex;
+use crate::hdf5::Result;
 use crate::BaseSpace;
 use crate::ReadField;
 use crate::{cheb_dirichlet, chebyshev, fourier_r2c, Field2, Space2};
 use hdf5_interface::hdf5_get_size_dimension;
 use num_traits::Zero;
-use crate::hdf5::Result;
-use crate::hdf5::write_to_hdf5;
-use crate::hdf5::write_to_hdf5_complex;
 
 /// Read velocities from file,
 /// calculate dudy - dvdx and append vortictiy

@@ -5,9 +5,13 @@
 //! - cargo >= v1.49
 //! - `hdf5` (sudo apt-get install -y libhdf5-dev)
 //!
-//! And for versions > 0.2.0:
-//! - mpi installation
-//! - libclang
+//! # Important
+//!
+//! OpenBlas's multithreading conflicts with internal multithreading.
+//! Turn it off for better performance:
+//! ```
+//! export OPENBLAS_NUM_THREADS=1
+//! ```
 //!
 //! # Details
 //!
